@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 10)
-
 function formatHour(h) {
   if (h < 12) return `${h}:00 AM`
   if (h === 12) return `12:00 PM`
