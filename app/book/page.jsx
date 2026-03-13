@@ -111,6 +111,17 @@ export default function Book() {
       booking_id: newBooking.id
     })
 
+    await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'booking',
+        studentEmail: user.email,
+        date: formatDate(selectedDate),
+        time: formatHour(slot.start_hour)
+      })
+    })
+
     setBalance(currentBalance - 1)
     setMessage(`Booked! See you ${formatDate(selectedDate)} at ${formatHour(slot.start_hour)}`)
     setBooking(slot.id)
@@ -153,8 +164,7 @@ export default function Book() {
               border: booking === slot.id ? '1px solid #333' : '1px solid #444',
               borderRadius: '6px',
               cursor: booking === slot.id ? 'default' : 'pointer',
-              fontSize: '0.9rem',
-              transition: 'all 0.2s'
+              fontSize: '0.9rem'
             }}
             onMouseEnter={e => { if (booking !== slot.id) e.target.style.borderColor = '#cc0000' }}
             onMouseLeave={e => { if (booking !== slot.id) e.target.style.borderColor = '#444' }}

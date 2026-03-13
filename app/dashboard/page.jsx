@@ -59,6 +59,17 @@ export default function Dashboard() {
       booking_id: booking.id
     })
 
+    await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'cancellation',
+        studentEmail: user.email,
+        date: booking.slots.slot_date,
+        time: formatHour(booking.slots.start_hour)
+      })
+    })
+
     setBookings(bookings.filter(b => b.id !== booking.id))
     setBalance(balance + 1)
   }
