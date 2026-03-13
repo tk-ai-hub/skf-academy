@@ -6,6 +6,10 @@ import { supabase } from '../supabase'
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [dob, setDob] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -15,9 +19,28 @@ export default function Login() {
     setMessage('')
 
     if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) setMessage(error.message)
-      else setMessage('Check your email to confirm your account!')
+      const { data, error } = await supabase.auth.signUp({ email, password })
+      if (error) {
+        setMessage(error.message)
+        setLoading(false)
+        return
+      }
+
+      // Save profile to users table
+      if (data.user) {
+        await supabase.from('users').insert({
+          id: data.user.id,
+          tenant_id: (await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()).data.id,
+          email,
+          first_name: firstName,
+          last_name: lastName,
+          phone,
+          date_of_birth: dob || null,
+          role: 'student'
+        })
+      }
+
+      window.location.href = '/confirm'
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) setMessage(error.message)
@@ -25,6 +48,28 @@ export default function Login() {
     }
     setLoading(false)
   }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '0.75rem',
+    background: '#1a1a1a',
+    border: '1px solid #444',
+    borderRadius: '4px',
+    color: '#fff',
+    fontSize: '1rem',
+    boxSizing: 'border-box'
+  }
+
+  const labelStyle = {
+    display: 'block',
+    color: '#999',
+    fontSize: '0.8rem',
+    letterSpacing: '1px',
+    textTransform: 'uppercase',
+    marginBottom: '0.5rem'
+  }
+
+  const fieldStyle = { marginBottom: '1rem' }
 
   return (
     <main style={{ maxWidth: '400px', margin: '4rem auto' }}>
@@ -36,24 +81,40 @@ export default function Login() {
       </p>
 
       <div style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '2rem' }}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            style={{ width: '100%', padding: '0.75rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '1rem', boxSizing: 'border-box' }}
-          />
+
+        {isSignUp && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+              <div>
+                <label style={labelStyle}>First Name</label>
+                <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Last Name</label>
+                <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Phone Number</label>
+              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={inputStyle} />
+            </div>
+
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Date of Birth</label>
+              <input type="date" value={dob} onChange={e => setDob(e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} />
+            </div>
+          </>
+        )}
+
+        <div style={fieldStyle}>
+          <label style={labelStyle}>Email</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
         </div>
 
         <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            style={{ width: '100%', padding: '0.75rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '1rem', boxSizing: 'border-box' }}
-          />
+          <label style={labelStyle}>Password</label>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} />
         </div>
 
         <button
@@ -65,7 +126,7 @@ export default function Login() {
         </button>
 
         {message && (
-          <p style={{ marginTop: '1rem', color: message.includes('error') || message.includes('Error') ? '#ff6666' : '#66cc66', textAlign: 'center', fontSize: '0.9rem' }}>
+          <p style={{ marginTop: '1rem', color: '#ff6666', textAlign: 'center', fontSize: '0.9rem' }}>
             {message}
           </p>
         )}
