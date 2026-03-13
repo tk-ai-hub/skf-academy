@@ -27,39 +27,56 @@ export default function Login() {
   }
 
   return (
-    <main style={{ padding: '2rem', maxWidth: '400px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h1>SKF Academy</h1>
-      <h2>{isSignUp ? 'Create Account' : 'Sign In'}</h2>
-
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-        style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '1rem' }}
-      />
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-        style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '1rem' }}
-      />
-
-      <button
-        onClick={handleSubmit}
-        disabled={loading}
-        style={{ width: '100%', padding: '0.75rem', background: '#000', color: '#fff', border: 'none', cursor: 'pointer' }}
-      >
-        {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
-      </button>
-
-      <p style={{ marginTop: '1rem', cursor: 'pointer', textDecoration: 'underline' }}
-        onClick={() => setIsSignUp(!isSignUp)}>
-        {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+    <main style={{ maxWidth: '400px', margin: '4rem auto' }}>
+      <h2 style={{ color: '#fff', textAlign: 'center', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+        {isSignUp ? 'Create Account' : 'Sign In'}
+      </h2>
+      <p style={{ color: '#666', textAlign: 'center', marginBottom: '2rem', fontSize: '0.9rem' }}>
+        {isSignUp ? 'Join SKF Academy' : 'Welcome back'}
       </p>
 
-      {message && <p style={{ marginTop: '1rem', color: 'green' }}>{message}</p>}
+      <div style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '2rem' }}>
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            style={{ width: '100%', padding: '0.75rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '1rem', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            style={{ width: '100%', padding: '0.75rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '1rem', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          style={{ width: '100%', padding: '0.85rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}
+        >
+          {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
+        </button>
+
+        {message && (
+          <p style={{ marginTop: '1rem', color: message.includes('error') || message.includes('Error') ? '#ff6666' : '#66cc66', textAlign: 'center', fontSize: '0.9rem' }}>
+            {message}
+          </p>
+        )}
+
+        <p
+          onClick={() => setIsSignUp(!isSignUp)}
+          style={{ marginTop: '1.5rem', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '0.9rem' }}
+        >
+          {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+        </p>
+      </div>
     </main>
   )
 }

@@ -20,7 +20,7 @@ export default function Dashboard() {
       if (!user) { window.location.href = '/login'; return }
       setUser(user)
 
-      const { data: bookingData, error } = await supabase
+      const { data: bookingData } = await supabase
         .from('bookings')
         .select(`
           id, status, booked_at, tenant_id, student_id,
@@ -32,7 +32,6 @@ export default function Dashboard() {
         .eq('status', 'confirmed')
         .order('booked_at', { ascending: false })
 
-      console.log('bookings:', bookingData, 'error:', error)
       setBookings((bookingData || []).filter(b => b.slots))
 
       const { data: tokenData } = await supabase
@@ -65,31 +64,42 @@ export default function Dashboard() {
   }
 
   return (
-    <main style={{ padding: '2rem', fontFamily: 'sans-serif', maxWidth: '500px', margin: '0 auto' }}>
-      <h1>SKF Academy</h1>
-      {user && <p style={{ color: '#666' }}>Welcome back, {user.email}</p>}
+    <main>
+      {user && <p style={{ color: '#999', marginBottom: '1.5rem' }}>Welcome back, {user.email}</p>}
 
-      <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
-        <strong>Tokens remaining: {balance}</strong>
-        <span style={{ color: '#666', marginLeft: '0.5rem', fontSize: '0.9rem' }}>renew monthly</span>
+      <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', padding: '1rem 1.5rem', borderRadius: '8px', marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ color: '#cc0000', fontSize: '0.75rem', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Lesson Tokens</div>
+          <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#fff' }}>{balance}</div>
+        </div>
+        <div style={{ color: '#666', fontSize: '0.85rem', textAlign: 'right' }}>
+          Renew monthly<br />
+          <span style={{ color: '#cc0000' }}>4 tokens/month</span>
+        </div>
       </div>
 
-      <h2>Upcoming Lessons</h2>
+      <h2 style={{ color: '#fff', borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
+        Upcoming Lessons
+      </h2>
+
       {bookings.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
       ) : (
         bookings.map(b => (
-          <div key={b.id} style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
-            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1.1rem' }}>
-              {b.slots.slot_date} at {formatHour(b.slots.start_hour)}
-            </p>
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.75rem' }}>
-              <a href="/book" style={{ padding: '0.4rem 0.9rem', background: '#000', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '0.9rem' }}>
+          <div key={b.id} style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1.1rem', color: '#fff' }}>
+                {b.slots.slot_date} at {formatHour(b.slots.start_hour)}
+              </p>
+              <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.85rem' }}>Private Lesson</p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <a href="/book" style={{ padding: '0.4rem 1rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '0.9rem' }}>
                 Reschedule
               </a>
               <button
                 onClick={() => cancelBooking(b)}
-                style={{ padding: '0.4rem 0.9rem', background: '#fff', color: '#c00', border: '1px solid #c00', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem' }}
+                style={{ padding: '0.4rem 1rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem' }}
               >
                 Cancel
               </button>
@@ -98,7 +108,7 @@ export default function Dashboard() {
         ))
       )}
 
-      <a href="/book" style={{ display: 'inline-block', marginTop: '1rem', padding: '0.75rem 1.5rem', background: '#000', color: '#fff', textDecoration: 'none', borderRadius: '6px' }}>
+      <a href="/book" style={{ display: 'inline-block', marginTop: '1.5rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
         + Book a Lesson
       </a>
     </main>

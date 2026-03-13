@@ -9,6 +9,11 @@ function formatHour(h) {
   return `${h - 12}:00 PM`
 }
 
+function formatDate(d) {
+  const date = new Date(d + 'T00:00:00')
+  return date.toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+}
+
 export default function Book() {
   const [slots, setSlots] = useState([])
   const [selectedDate, setSelectedDate] = useState('')
@@ -107,47 +112,52 @@ export default function Book() {
     })
 
     setBalance(currentBalance - 1)
-    setMessage(`Booked! See you ${selectedDate} at ${formatHour(slot.start_hour)}`)
+    setMessage(`Booked! See you ${formatDate(selectedDate)} at ${formatHour(slot.start_hour)}`)
     setBooking(slot.id)
   }
 
   return (
-    <main style={{ padding: '2rem', fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto' }}>
-      <h1>SKF Academy</h1>
-      <h2>Book a Private Lesson</h2>
+    <main>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <h2 style={{ color: '#fff', margin: 0, letterSpacing: '1px', textTransform: 'uppercase' }}>Book a Private Lesson</h2>
+        <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', borderRadius: '6px', padding: '0.5rem 1rem', textAlign: 'center' }}>
+          <div style={{ color: '#cc0000', fontSize: '0.7rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Tokens</div>
+          <div style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 'bold' }}>{balance}</div>
+        </div>
+      </div>
 
-      <p style={{ background: '#f5f5f5', padding: '0.75rem', borderRadius: '6px' }}>
-        Tokens remaining: <strong>{balance}</strong>
-      </p>
-
-      <div style={{ marginBottom: '1.5rem', marginTop: '1rem' }}>
-        <label style={{ fontWeight: 'bold' }}>Select a date:</label>
+      <div style={{ marginBottom: '2rem' }}>
+        <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Select a Date</label>
         <select
           value={selectedDate}
           onChange={e => setSelectedDate(e.target.value)}
-          style={{ display: 'block', marginTop: '0.5rem', padding: '0.5rem', width: '100%' }}
+          style={{ width: '100%', padding: '0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '1rem' }}
         >
           {availableDates.map(d => (
-            <option key={d} value={d}>{d}</option>
+            <option key={d} value={d}>{formatDate(d)}</option>
           ))}
         </select>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+      <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1rem' }}>Available Times</label>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '2rem' }}>
         {slotsForDate.map(slot => (
           <button
             key={slot.id}
             onClick={() => bookSlot(slot)}
             disabled={booking === slot.id}
             style={{
-              padding: '0.75rem',
-              background: booking === slot.id ? '#ccc' : '#000',
-              color: '#fff',
-              border: 'none',
+              padding: '0.85rem',
+              background: booking === slot.id ? '#333' : '#2a2a2a',
+              color: booking === slot.id ? '#666' : '#fff',
+              border: booking === slot.id ? '1px solid #333' : '1px solid #444',
               borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.9rem'
+              cursor: booking === slot.id ? 'default' : 'pointer',
+              fontSize: '0.9rem',
+              transition: 'all 0.2s'
             }}
+            onMouseEnter={e => { if (booking !== slot.id) e.target.style.borderColor = '#cc0000' }}
+            onMouseLeave={e => { if (booking !== slot.id) e.target.style.borderColor = '#444' }}
           >
             {formatHour(slot.start_hour)}
           </button>
@@ -155,14 +165,14 @@ export default function Book() {
       </div>
 
       {message && (
-        <p style={{ marginTop: '1.5rem', color: 'green', fontWeight: 'bold' }}>
-          {message}
-        </p>
+        <div style={{ background: '#1a3a1a', border: '1px solid #2a6a2a', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
+          <p style={{ margin: 0, color: '#66cc66', fontWeight: 'bold' }}>{message}</p>
+        </div>
       )}
 
-      <p style={{ marginTop: '2rem' }}>
-        <a href="/dashboard">← Back to dashboard</a>
-      </p>
+      <a href="/dashboard" style={{ color: '#666', textDecoration: 'none', fontSize: '0.9rem' }}>
+        ← Back to dashboard
+      </a>
     </main>
   )
 }
