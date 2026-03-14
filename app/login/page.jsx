@@ -26,11 +26,16 @@ export default function Login() {
         return
       }
 
-      // Save profile to users table
       if (data.user) {
+        const { data: tenantData } = await supabase
+          .from('tenants')
+          .select('id')
+          .eq('slug', 'skf-academy')
+          .single()
+
         await supabase.from('users').insert({
           id: data.user.id,
-          tenant_id: (await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()).data.id,
+          tenant_id: tenantData.id,
           email,
           first_name: firstName,
           last_name: lastName,
