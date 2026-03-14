@@ -11,6 +11,7 @@ function formatHour(h) {
 
 export default function Dashboard() {
   const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [bookings, setBookings] = useState([])
   const [balance, setBalance] = useState(0)
 
@@ -19,6 +20,14 @@ export default function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/login'; return }
       setUser(user)
+
+      const { data: profileData } = await supabase
+        .from('users')
+        .select('first_name, last_name, belt_rank')
+        .eq('id', user.id)
+        .single()
+
+      setProfile(profileData)
 
       const { data: bookingData } = await supabase
         .from('bookings')
@@ -74,9 +83,23 @@ export default function Dashboard() {
     setBalance(balance + 1)
   }
 
+  const displayName = profile?.first_name
+    ? `${profile.first_name} ${profile.last_name || ''}`.trim()
+    : user?.email
+
   return (
     <main>
-      {user && <p style={{ color: '#999', marginBottom: '1.5rem' }}>Welcome back, {user.email}</p>}
+      {user && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <p style={{ color: '#999', margin: 0 }}>Welcome back,</p>
+          <h2 style={{ color: '#fff', margin: '0.25rem 0 0', fontSize: '1.5rem' }}>{displayName}</h2>
+          {profile?.belt_rank && (
+            <p style={{ color: '#cc0000', fontSize: '0.8rem', letterSpacing: '2px', textTransform: 'uppercase', margin: '0.25rem 0 0' }}>
+              {profile.belt_rank} belt
+            </p>
+          )}
+        </div>
+      )}
 
       <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', padding: '1rem 1.5rem', borderRadius: '8px', marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
