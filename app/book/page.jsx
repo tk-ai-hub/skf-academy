@@ -14,19 +14,35 @@ function formatDate(d) {
   return date.toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 }
 
+function isBirthday(dateStr, dob) {
+  if (!dob) return false
+  const [, month, day] = dateStr.split('-').map(Number)
+  const [, bMonth, bDay] = dob.split('-').map(Number)
+  return month === bMonth && day === bDay
+}
+
 export default function Book() {
   const [slots, setSlots] = useState([])
   const [selectedDate, setSelectedDate] = useState('')
   const [availableDates, setAvailableDates] = useState([])
   const [booking, setBooking] = useState(null)
   const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [message, setMessage] = useState('')
   const [balance, setBalance] = useState(0)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) window.location.href = '/login'
-      else setUser(data.user)
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) { window.location.href = '/login'; return }
+      setUser(data.user)
+
+      const { data: profileData } = await supabase
+        .from('users')
+        .select('first_name, date_of_birth')
+        .eq('id', data.user.id)
+        .single()
+
+      setProfile(profileData)
     })
   }, [])
 
@@ -70,6 +86,7 @@ export default function Book() {
   }, [user])
 
   const slotsForDate = slots.filter(s => s.slot_date === selectedDate)
+  const birthdayToday = isBirthday(selectedDate, profile?.date_of_birth)
 
   async function bookSlot(slot) {
     if (!user) return
@@ -145,10 +162,18 @@ export default function Book() {
           style={{ width: '100%', padding: '0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '1rem' }}
         >
           {availableDates.map(d => (
-            <option key={d} value={d}>{formatDate(d)}</option>
+            <option key={d} value={d}>
+              {formatDate(d)}{isBirthday(d, profile?.date_of_birth) ? ' 🎂' : ''}
+            </option>
           ))}
         </select>
       </div>
+
+      {birthdayToday && (
+        <div style={{ background: '#2a1a1a', border: '1px solid #cc0000', borderRadius: '8px', padding: '0.75rem 1.5rem', marginBottom: '1.5rem', textAlign: 'center' }}>
+          <p style={{ margin: 0, color: '#cc0000' }}>🎂 Happy Birthday{profile?.first_name ? `, ${profile.first_name}` : ''}! Book a special lesson today!</p>
+        </div>
+      )}
 
       <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1rem' }}>Available Times</label>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '2rem' }}>
