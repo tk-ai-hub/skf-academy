@@ -9,9 +9,8 @@ export async function POST(request) {
 
   try {
     if (type === 'booking') {
-      // Email to student
       await resend.emails.send({
-        from: 'SKF Academy <onboarding@resend.dev>',
+        from: 'SKF Academy <noreply@kungfubc.com>',
         to: studentEmail,
         subject: 'Lesson Booked — SKF Academy',
         html: `
@@ -33,9 +32,8 @@ export async function POST(request) {
         `
       })
 
-      // Email to admin
       await resend.emails.send({
-        from: 'SKF Academy <onboarding@resend.dev>',
+        from: 'SKF Academy <noreply@kungfubc.com>',
         to: adminEmail,
         subject: `New Booking — ${studentEmail}`,
         html: `
@@ -50,9 +48,8 @@ export async function POST(request) {
     }
 
     if (type === 'cancellation') {
-      // Email to student
       await resend.emails.send({
-        from: 'SKF Academy <onboarding@resend.dev>',
+        from: 'SKF Academy <noreply@kungfubc.com>',
         to: studentEmail,
         subject: 'Lesson Cancelled — SKF Academy',
         html: `
@@ -70,9 +67,8 @@ export async function POST(request) {
         `
       })
 
-      // Email to admin
       await resend.emails.send({
-        from: 'SKF Academy <onboarding@resend.dev>',
+        from: 'SKF Academy <noreply@kungfubc.com>',
         to: adminEmail,
         subject: `Cancellation — ${studentEmail}`,
         html: `
