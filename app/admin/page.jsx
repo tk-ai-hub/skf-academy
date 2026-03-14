@@ -11,6 +11,27 @@ function formatHour(h) {
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 10)
 
+function getUpcomingBirthdays(students) {
+  const today = new Date()
+  const in30 = new Date()
+  in30.setDate(today.getDate() + 30)
+
+  return students.filter(s => {
+    if (!s.date_of_birth) return false
+    const [, bMonth, bDay] = s.date_of_birth.split('-').map(Number)
+    const thisYear = new Date(today.getFullYear(), bMonth - 1, bDay)
+    const nextYear = new Date(today.getFullYear() + 1, bMonth - 1, bDay)
+    const upcoming = thisYear >= today ? thisYear : nextYear
+    return upcoming <= in30
+  }).map(s => {
+    const [, bMonth, bDay] = s.date_of_birth.split('-').map(Number)
+    const thisYear = new Date(new Date().getFullYear(), bMonth - 1, bDay)
+    const nextYear = new Date(new Date().getFullYear() + 1, bMonth - 1, bDay)
+    const upcoming = thisYear >= new Date() ? thisYear : nextYear
+    return { ...s, upcomingBirthday: upcoming }
+  }).sort((a, b) => a.upcomingBirthday - b.upcomingBirthday)
+}
+
 export default function Admin() {
   const [bookings, setBookings] = useState([])
   const [students, setStudents] = useState([])
@@ -32,7 +53,7 @@ export default function Admin() {
       .select(`
         id, status, booked_at, tenant_id, student_id,
         slots!bookings_slot_id_fkey (id, slot_date, start_hour),
-        users!bookings_student_id_fkey (full_name, email)
+        users!bookings_student_id_fkey (full_name, first_name, last_name, email)
       `)
       .eq('status', 'confirmed')
       .order('booked_at', { ascending: false })
@@ -41,7 +62,7 @@ export default function Admin() {
 
     const { data: studentData } = await supabase
       .from('users')
-      .select('id, full_name, email, belt_rank')
+      .select('id, full_name, first_name, last_name, email, belt_rank, date_of_birth')
       .eq('role', 'student')
 
     setStudents(studentData || [])
@@ -143,50 +164,73 @@ export default function Admin() {
     loadData()
   }
 
+  const upcomingBirthdays = getUpcomingBirthdays(students)
+
+  function studentName(s) {
+    if (s?.first_name) return `${s.first_name} ${s.last_name || ''}`.trim()
+    return s?.email || 'Unknown'
+  }
+
   return (
-    <main style={{ padding: '2rem', fontFamily: 'sans-serif', maxWidth: '700px', margin: '0 auto' }}>
-      <h1>SKF Academy — Admin</h1>
+    <main style={{ fontFamily: 'sans-serif', maxWidth: '700px', margin: '0 auto' }}>
+      <h1 style={{ color: '#fff', borderBottom: '2px solid #cc0000', paddingBottom: '0.5rem' }}>SKF Academy — Admin</h1>
 
       {message && (
-        <p style={{ background: '#e6ffe6', padding: '0.75rem', borderRadius: '6px', color: 'green' }}>
+        <p style={{ background: '#1a3a1a', border: '1px solid #2a6a2a', padding: '0.75rem', borderRadius: '6px', color: '#66cc66' }}>
           {message}
         </p>
       )}
 
-      <h2>Block Date Range</h2>
-      <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '1.5rem', marginBottom: '1rem' }}>
+      {/* Upcoming Birthdays */}
+      {upcomingBirthdays.length > 0 && (
+        <>
+          <h2 style={{ color: '#fff' }}>🎂 Upcoming Birthdays</h2>
+          {upcomingBirthdays.map(s => (
+            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#2a1a1a', border: '1px solid #cc0000', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.5rem' }}>
+              <strong style={{ color: '#fff' }}>{studentName(s)}</strong>
+              <span style={{ color: '#cc0000' }}>
+                🎂 {s.upcomingBirthday.toLocaleDateString('en-CA', { month: 'long', day: 'numeric' })}
+              </span>
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* Block Date Range */}
+      <h2 style={{ color: '#fff' }}>Block Date Range</h2>
+      <div style={{ border: '1px solid #333', borderRadius: '8px', padding: '1.5rem', marginBottom: '1rem', background: '#2a2a2a' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold' }}>From</label>
+            <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>From</label>
             <input type="date" value={blockStart} onChange={e => setBlockStart(e.target.value)}
-              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+              style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }} />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold' }}>To</label>
+            <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>To</label>
             <input type="date" value={blockEnd} onChange={e => setBlockEnd(e.target.value)}
-              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+              style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }} />
           </div>
         </div>
         <input type="text" placeholder="Reason (e.g. Summer holiday)" value={blockReason}
           onChange={e => setBlockReason(e.target.value)}
-          style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '1rem', boxSizing: 'border-box' }} />
+          style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', marginBottom: '1rem', boxSizing: 'border-box' }} />
         <button onClick={blockDates}
-          style={{ padding: '0.75rem 1.5rem', background: '#c00', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+          style={{ padding: '0.75rem 1.5rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
           Block These Dates
         </button>
       </div>
 
       {blockedRanges.length > 0 && (
         <>
-          <h3>Currently Blocked Ranges</h3>
+          <h3 style={{ color: '#fff' }}>Currently Blocked Ranges</h3>
           {blockedRanges.map(r => (
-            <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #fcc', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.5rem', background: '#fff5f5' }}>
+            <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #cc0000', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.5rem', background: '#2a1a1a' }}>
               <div>
-                <strong>{r.start_date} → {r.end_date}</strong>
+                <strong style={{ color: '#fff' }}>{r.start_date} → {r.end_date}</strong>
                 <span style={{ marginLeft: '0.75rem', color: '#666', fontSize: '0.9rem' }}>{r.reason}</span>
               </div>
               <button onClick={() => unblockRange(r)}
-                style={{ padding: '0.3rem 0.75rem', background: '#fff', color: '#c00', border: '1px solid #c00', borderRadius: '4px', cursor: 'pointer' }}>
+                style={{ padding: '0.3rem 0.75rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer' }}>
                 Unblock
               </button>
             </div>
@@ -194,42 +238,43 @@ export default function Admin() {
         </>
       )}
 
-      <h2 style={{ marginTop: '2rem' }}>Block Single Time Slot</h2>
-      <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '1.5rem', marginBottom: '1rem' }}>
+      {/* Block Single Slot */}
+      <h2 style={{ color: '#fff', marginTop: '2rem' }}>Block Single Time Slot</h2>
+      <div style={{ border: '1px solid #333', borderRadius: '8px', padding: '1.5rem', marginBottom: '1rem', background: '#2a2a2a' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold' }}>Date</label>
+            <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>Date</label>
             <input type="date" value={blockSlotDate} onChange={e => setBlockSlotDate(e.target.value)}
-              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+              style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }} />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold' }}>Time</label>
+            <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>Time</label>
             <select value={blockSlotHour} onChange={e => setBlockSlotHour(Number(e.target.value))}
-              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }}>
+              style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }}>
               {HOURS.map(h => <option key={h} value={h}>{formatHour(h)}</option>)}
             </select>
           </div>
         </div>
         <input type="text" placeholder="Reason (optional)" value={blockSlotReason}
           onChange={e => setBlockSlotReason(e.target.value)}
-          style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '1rem', boxSizing: 'border-box' }} />
+          style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', marginBottom: '1rem', boxSizing: 'border-box' }} />
         <button onClick={blockSingleSlot}
-          style={{ padding: '0.75rem 1.5rem', background: '#c00', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+          style={{ padding: '0.75rem 1.5rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
           Block This Slot
         </button>
       </div>
 
       {blockedSlots.length > 0 && (
         <>
-          <h3>Currently Blocked Slots</h3>
+          <h3 style={{ color: '#fff' }}>Currently Blocked Slots</h3>
           {blockedSlots.map(s => (
-            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #fcc', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.5rem', background: '#fff5f5' }}>
+            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #cc0000', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.5rem', background: '#2a1a1a' }}>
               <div>
-                <strong>{s.slot_date} at {formatHour(s.start_hour)}</strong>
+                <strong style={{ color: '#fff' }}>{s.slot_date} at {formatHour(s.start_hour)}</strong>
                 {s.block_reason && <span style={{ marginLeft: '0.75rem', color: '#666', fontSize: '0.9rem' }}>{s.block_reason}</span>}
               </div>
               <button onClick={() => unblockSlot(s)}
-                style={{ padding: '0.3rem 0.75rem', background: '#fff', color: '#c00', border: '1px solid #c00', borderRadius: '4px', cursor: 'pointer' }}>
+                style={{ padding: '0.3rem 0.75rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer' }}>
                 Unblock
               </button>
             </div>
@@ -237,44 +282,49 @@ export default function Admin() {
         </>
       )}
 
-      <h2 style={{ marginTop: '2rem' }}>Upcoming Bookings</h2>
+      {/* Upcoming Bookings */}
+      <h2 style={{ color: '#fff', marginTop: '2rem' }}>Upcoming Bookings</h2>
       {bookings.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming bookings.</p>
       ) : (
         bookings.map(b => (
-          <div key={b.id} style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '1rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div key={b.id} style={{ border: '1px solid #333', borderRadius: '8px', padding: '1rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#2a2a2a' }}>
             <div>
-              <p style={{ margin: 0, fontWeight: 'bold' }}>{b.slots.slot_date} at {formatHour(b.slots.start_hour)}</p>
+              <p style={{ margin: 0, fontWeight: 'bold', color: '#fff' }}>{b.slots.slot_date} at {formatHour(b.slots.start_hour)}</p>
               <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.9rem' }}>
-                {b.users?.full_name || b.users?.email || 'Unknown student'}
+                {studentName(b.users)}
               </p>
             </div>
             <button onClick={() => cancelBooking(b)}
-              style={{ padding: '0.4rem 0.9rem', background: '#fff', color: '#c00', border: '1px solid #c00', borderRadius: '4px', cursor: 'pointer' }}>
+              style={{ padding: '0.4rem 0.9rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer' }}>
               Cancel
             </button>
           </div>
         ))
       )}
 
-      <h2 style={{ marginTop: '2rem' }}>Students</h2>
+      {/* Students */}
+      <h2 style={{ color: '#fff', marginTop: '2rem' }}>Students</h2>
       {students.length === 0 ? (
         <p style={{ color: '#666' }}>No students yet.</p>
       ) : (
         students.map(s => (
-          <div key={s.id} style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '1rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div key={s.id} style={{ border: '1px solid #333', borderRadius: '8px', padding: '1rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#2a2a2a' }}>
             <div>
-              <p style={{ margin: 0, fontWeight: 'bold' }}>{s.full_name || s.email}</p>
-              <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.9rem' }}>{s.belt_rank} belt</p>
+              <p style={{ margin: 0, fontWeight: 'bold', color: '#fff' }}>{studentName(s)}</p>
+              <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.9rem' }}>
+                {s.belt_rank} belt
+                {s.date_of_birth && <span style={{ marginLeft: '0.75rem' }}>🎂 {s.date_of_birth}</span>}
+              </p>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button onClick={() => addTokens(s.id, 1)}
-                style={{ padding: '0.4rem 0.9rem', background: '#000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                +1 Token
+                style={{ padding: '0.4rem 0.9rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                +1
               </button>
               <button onClick={() => addTokens(s.id, 4)}
-                style={{ padding: '0.4rem 0.9rem', background: '#000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                +4 Tokens
+                style={{ padding: '0.4rem 0.9rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                +4
               </button>
             </div>
           </div>
