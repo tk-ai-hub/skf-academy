@@ -25,7 +25,7 @@ export default function Book() {
   const [slots, setSlots] = useState([])
   const [selectedDate, setSelectedDate] = useState('')
   const [availableDates, setAvailableDates] = useState([])
-  const [booking, setBooking] = useState(null)
+  const [bookedIds, setBookedIds] = useState([])
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [message, setMessage] = useState('')
@@ -48,19 +48,20 @@ export default function Book() {
 
   useEffect(() => {
     async function loadSlots() {
-      const { data: bookedSlots } = await supabase
+      const { data: existingBookings } = await supabase
         .from('bookings')
         .select('slot_id')
         .eq('status', 'confirmed')
 
-      const bookedIds = (bookedSlots || []).map(b => b.slot_id)
+      const alreadyBooked = (existingBookings || []).map(b => b.slot_id)
+      setBookedIds(alreadyBooked)
 
       const { data } = await supabase
         .from('slots')
         .select('*')
         .eq('is_blocked', false)
         .gte('slot_date', new Date().toISOString().split('T')[0])
-        .not('id', 'in', `(${bookedIds.length > 0 ? bookedIds.join(',') : '00000000-0000-0000-0000-000000000000'})`)
+        .not('id', 'in', `(${alreadyBooked.length > 0 ? alreadyBooked.join(',') : '00000000-0000-0000-0000-000000000000'})`)
         .order('slot_date', { ascending: true })
         .order('start_hour', { ascending: true })
 
@@ -85,7 +86,7 @@ export default function Book() {
     loadBalance()
   }, [user])
 
-  const slotsForDate = slots.filter(s => s.slot_date === selectedDate)
+  const slotsForDate = slots.filter(s => s.slot_date === selectedDate && !bookedIds.includes(s.id))
   const birthdayToday = isBirthday(selectedDate, profile?.date_of_birth)
 
   async function bookSlot(slot) {
@@ -140,8 +141,8 @@ export default function Book() {
     })
 
     setBalance(currentBalance - 1)
+    setBookedIds(prev => [...prev, slot.id])
     setMessage(`Booked! See you ${formatDate(selectedDate)} at ${formatHour(slot.start_hour)}`)
-    setBooking(slot.id)
   }
 
   return (
@@ -181,18 +182,17 @@ export default function Book() {
           <button
             key={slot.id}
             onClick={() => bookSlot(slot)}
-            disabled={booking === slot.id}
             style={{
               padding: '0.85rem',
-              background: booking === slot.id ? '#333' : '#2a2a2a',
-              color: booking === slot.id ? '#666' : '#fff',
-              border: booking === slot.id ? '1px solid #333' : '1px solid #444',
+              background: '#2a2a2a',
+              color: '#fff',
+              border: '1px solid #444',
               borderRadius: '6px',
-              cursor: booking === slot.id ? 'default' : 'pointer',
+              cursor: 'pointer',
               fontSize: '0.9rem'
             }}
-            onMouseEnter={e => { if (booking !== slot.id) e.target.style.borderColor = '#cc0000' }}
-            onMouseLeave={e => { if (booking !== slot.id) e.target.style.borderColor = '#444' }}
+            onMouseEnter={e => e.target.style.borderColor = '#cc0000'}
+            onMouseLeave={e => e.target.style.borderColor = '#444'}
           >
             {formatHour(slot.start_hour)}
           </button>
