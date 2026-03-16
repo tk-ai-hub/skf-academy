@@ -38,7 +38,7 @@ export default function Book() {
 
       const { data: profileData } = await supabase
         .from('users')
-        .select('first_name, date_of_birth')
+        .select('first_name, last_name, phone, date_of_birth')
         .eq('id', data.user.id)
         .single()
 
@@ -129,14 +129,21 @@ export default function Book() {
       booking_id: newBooking.id
     })
 
+    const studentName = profile?.first_name
+      ? `${profile.last_name || ''} ${profile.first_name}`.trim()
+      : user.email
+
     await fetch('/api/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'booking',
         studentEmail: user.email,
-        date: formatDate(selectedDate),
-        time: formatHour(slot.start_hour)
+        studentName,
+        phone: profile?.phone || '',
+        date: slot.slot_date,
+        time: formatHour(slot.start_hour),
+        hour: slot.start_hour
       })
     })
 
@@ -172,7 +179,7 @@ export default function Book() {
 
       {birthdayToday && (
         <div style={{ background: '#2a1a1a', border: '1px solid #cc0000', borderRadius: '8px', padding: '0.75rem 1.5rem', marginBottom: '1.5rem', textAlign: 'center' }}>
-          <p style={{ margin: 0, color: '#cc0000' }}>🎂 Happy Birthday{profile?.first_name ? `, ${profile.first_name}` : ''}! Book a special lesson today!</p>
+          <p style={{ margin: 0, color: '#cc0000' }}>Happy Birthday{profile?.first_name ? `, ${profile.first_name}` : ''}! Book a special lesson today!</p>
         </div>
       )}
 
@@ -206,7 +213,7 @@ export default function Book() {
       )}
 
       <a href="/dashboard" style={{ color: '#666', textDecoration: 'none', fontSize: '0.9rem' }}>
-        ← Back to dashboard
+        Back to dashboard
       </a>
     </main>
   )
