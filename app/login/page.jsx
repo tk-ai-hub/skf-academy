@@ -16,13 +16,11 @@ export default function Login() {
   const [installPrompt, setInstallPrompt] = useState(null)
   const [showInstallBanner, setShowInstallBanner] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
-  const [isStandalone, setIsStandalone] = useState(false)
 
   useEffect(() => {
     const ios = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase())
     const standalone = window.matchMedia('(display-mode: standalone)').matches
     setIsIOS(ios)
-    setIsStandalone(standalone)
 
     if (!standalone) {
       if (ios) {
@@ -112,15 +110,15 @@ export default function Login() {
       {showInstallBanner && (
         <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <p style={{ margin: 0, color: '#fff', fontWeight: 'bold', fontSize: '0.9rem' }}>📲 Install SKF Academy</p>
+            <p style={{ margin: 0, color: '#fff', fontWeight: 'bold', fontSize: '0.9rem' }}>Install SKF Academy</p>
             <button onClick={() => setShowInstallBanner(false)}
-              style={{ background: 'transparent', color: '#666', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: 0 }}>✕</button>
+              style={{ background: 'transparent', color: '#666', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: 0 }}>x</button>
           </div>
 
           {isIOS ? (
             <div style={{ marginTop: '0.75rem' }}>
               <p style={{ margin: '0 0 0.5rem', color: '#999', fontSize: '0.85rem' }}>Add this app to your home screen:</p>
-              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>1. Tap the <strong style={{ color: '#fff' }}>Share</strong> button at the bottom of Safari ⬆️</p>
+              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>1. Tap the <strong style={{ color: '#fff' }}>Share</strong> button at the bottom of Safari</p>
               <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>2. Scroll down and tap <strong style={{ color: '#fff' }}>"Add to Home Screen"</strong></p>
               <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>3. Tap <strong style={{ color: '#fff' }}>"Add"</strong> in the top right</p>
             </div>
