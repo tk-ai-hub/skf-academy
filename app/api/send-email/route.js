@@ -3,29 +3,75 @@ import { google } from 'googleapis'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
+async function getCalendarClient() {
+  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/calendar']
+  })
+  return google.calendar({ version: 'v3', auth })
+}
+
+async function findCalendarEvent(calendar, date, studentName) {
+  try {
+    const timeMin = new Date(`${date}T00:00:00`)
+    timeMin.setHours(0, 0, 0, 0)
+    const timeMax = new Date(`${date}T23:59:59`)
+    timeMax.setHours(23, 59, 59, 999)
+
+    const events = await calendar.events.list({
+      calendarId: process.env.GOOGLE_CALENDAR_ID,
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      q: studentName
+    })
+    return events.data.items?.[0] || null
+  } catch (err) {
+    console.error('Find event error:', err.message)
+    return null
+  }
+}
+
 async function addToGoogleCalendar(date, hour, studentName, phone) {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ['https://www.googleapis.com/auth/calendar']
-    })
-    const calendar = google.calendar({ version: 'v3', auth })
+    const calendar = await getCalendarClient()
 
-    const start = new Date(`${date}T${String(hour).padStart(2, '0')}:00:00`)
-    const end = new Date(start.getTime() + 60 * 60 * 1000)
+    // Build datetime string with explicit Pacific time
+    const hourPadded = String(hour).padStart(2, '0')
+    const endHour = String(hour + 1).padStart(2, '0')
 
     await calendar.events.insert({
       calendarId: process.env.GOOGLE_CALENDAR_ID,
       requestBody: {
         summary: `${studentName} - ${phone}`,
         description: `Private Kung Fu Lesson\nStudent: ${studentName}\nPhone: ${phone}`,
-        start: { dateTime: start.toISOString(), timeZone: 'America/Vancouver' },
-        end: { dateTime: end.toISOString(), timeZone: 'America/Vancouver' }
+        start: {
+          dateTime: `${date}T${hourPadded}:00:00`,
+          timeZone: 'America/Vancouver'
+        },
+        end: {
+          dateTime: `${date}T${endHour}:00:00`,
+          timeZone: 'America/Vancouver'
+        }
       }
     })
   } catch (err) {
-    console.error('Google Calendar error:', err.message)
+    console.error('Add calendar event error:', err.message)
+  }
+}
+
+async function deleteFromGoogleCalendar(date, studentName) {
+  try {
+    const calendar = await getCalendarClient()
+    const event = await findCalendarEvent(calendar, date, studentName)
+    if (event) {
+      await calendar.events.delete({
+        calendarId: process.env.GOOGLE_CALENDAR_ID,
+        eventId: event.id
+      })
+    }
+  } catch (err) {
+    console.error('Delete calendar event error:', err.message)
   }
 }
 
@@ -79,6 +125,10 @@ export async function POST(request) {
     }
 
     if (type === 'cancellation') {
+      if (studentName) {
+        await deleteFromGoogleCalendar(date, studentName)
+      }
+
       await resend.emails.send({
         from: 'SKF Academy <noreply@kungfubc.com>',
         to: studentEmail,
