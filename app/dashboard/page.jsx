@@ -23,7 +23,7 @@ export default function Dashboard() {
 
       const { data: profileData } = await supabase
         .from('users')
-        .select('first_name, last_name, belt_rank')
+        .select('first_name, last_name, phone, belt_rank')
         .eq('id', user.id)
         .single()
 
@@ -68,14 +68,21 @@ export default function Dashboard() {
       booking_id: booking.id
     })
 
+    const studentName = profile?.first_name
+      ? `${profile.last_name || ''} ${profile.first_name}`.trim()
+      : user.email
+
     await fetch('/api/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'cancellation',
         studentEmail: user.email,
+        studentName,
+        phone: profile?.phone || '',
         date: booking.slots.slot_date,
-        time: formatHour(booking.slots.start_hour)
+        time: formatHour(booking.slots.start_hour),
+        hour: booking.slots.start_hour
       })
     })
 
