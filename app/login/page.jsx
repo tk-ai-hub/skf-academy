@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
 export default function Login() {
@@ -13,6 +13,23 @@ export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false)
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [installPrompt, setInstallPrompt] = useState(null)
+  const [showInstallBanner, setShowInstallBanner] = useState(false)
+
+  useEffect(() => {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault()
+      setInstallPrompt(e)
+      setShowInstallBanner(true)
+    })
+  }, [])
+
+  async function handleInstall() {
+    if (!installPrompt) return
+    installPrompt.prompt()
+    const { outcome } = await installPrompt.userChoice
+    if (outcome === 'accepted') setShowInstallBanner(false)
+  }
 
   async function handleSubmit() {
     setLoading(true)
@@ -78,6 +95,26 @@ export default function Login() {
 
   return (
     <main style={{ maxWidth: '400px', margin: '4rem auto' }}>
+
+      {showInstallBanner && (
+        <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <p style={{ margin: 0, color: '#fff', fontWeight: 'bold', fontSize: '0.9rem' }}>📲 Install SKF Academy</p>
+            <p style={{ margin: '0.25rem 0 0', color: '#999', fontSize: '0.8rem' }}>Add to your home screen for quick access</p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={handleInstall}
+              style={{ padding: '0.4rem 0.9rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>
+              Install
+            </button>
+            <button onClick={() => setShowInstallBanner(false)}
+              style={{ padding: '0.4rem 0.75rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       <h2 style={{ color: '#fff', textAlign: 'center', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
         {isSignUp ? 'Create Account' : 'Sign In'}
       </h2>
