@@ -16,14 +16,18 @@ export default function Login() {
   const [installPrompt, setInstallPrompt] = useState(null)
   const [showInstallBanner, setShowInstallBanner] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
+  const [isMac, setIsMac] = useState(false)
 
   useEffect(() => {
-    const ios = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase())
+    const ua = window.navigator.userAgent.toLowerCase()
+    const ios = /iphone|ipad|ipod/.test(ua)
+    const mac = /macintosh/.test(ua) && /safari/.test(ua) && !/chrome/.test(ua)
     const standalone = window.matchMedia('(display-mode: standalone)').matches
     setIsIOS(ios)
+    setIsMac(mac)
 
     if (!standalone) {
-      if (ios) {
+      if (ios || mac) {
         setShowInstallBanner(true)
       } else {
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -121,6 +125,12 @@ export default function Login() {
               <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>1. Tap the <strong style={{ color: '#fff' }}>Share</strong> button at the bottom of Safari</p>
               <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>2. Scroll down and tap <strong style={{ color: '#fff' }}>"Add to Home Screen"</strong></p>
               <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>3. Tap <strong style={{ color: '#fff' }}>"Add"</strong> in the top right</p>
+            </div>
+          ) : isMac ? (
+            <div style={{ marginTop: '0.75rem' }}>
+              <p style={{ margin: '0 0 0.5rem', color: '#999', fontSize: '0.85rem' }}>Add this app to your Mac dock:</p>
+              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>1. Click the <strong style={{ color: '#fff' }}>Share</strong> button in the Safari toolbar</p>
+              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>2. Click <strong style={{ color: '#fff' }}>"Add to Dock"</strong></p>
             </div>
           ) : (
             <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
