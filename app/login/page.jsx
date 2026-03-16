@@ -15,13 +15,26 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [installPrompt, setInstallPrompt] = useState(null)
   const [showInstallBanner, setShowInstallBanner] = useState(false)
+  const [isIOS, setIsIOS] = useState(false)
+  const [isStandalone, setIsStandalone] = useState(false)
 
   useEffect(() => {
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault()
-      setInstallPrompt(e)
-      setShowInstallBanner(true)
-    })
+    const ios = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase())
+    const standalone = window.matchMedia('(display-mode: standalone)').matches
+    setIsIOS(ios)
+    setIsStandalone(standalone)
+
+    if (!standalone) {
+      if (ios) {
+        setShowInstallBanner(true)
+      } else {
+        window.addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault()
+          setInstallPrompt(e)
+          setShowInstallBanner(true)
+        })
+      }
+    }
   }, [])
 
   async function handleInstall() {
@@ -97,21 +110,29 @@ export default function Login() {
     <main style={{ maxWidth: '400px', margin: '4rem auto' }}>
 
       {showInstallBanner && (
-        <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
+        <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <p style={{ margin: 0, color: '#fff', fontWeight: 'bold', fontSize: '0.9rem' }}>📲 Install SKF Academy</p>
-            <p style={{ margin: '0.25rem 0 0', color: '#999', fontSize: '0.8rem' }}>Add to your home screen for quick access</p>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={handleInstall}
-              style={{ padding: '0.4rem 0.9rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>
-              Install
-            </button>
             <button onClick={() => setShowInstallBanner(false)}
-              style={{ padding: '0.4rem 0.75rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>
-              ✕
-            </button>
+              style={{ background: 'transparent', color: '#666', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: 0 }}>✕</button>
           </div>
+
+          {isIOS ? (
+            <div style={{ marginTop: '0.75rem' }}>
+              <p style={{ margin: '0 0 0.5rem', color: '#999', fontSize: '0.85rem' }}>Add this app to your home screen:</p>
+              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>1. Tap the <strong style={{ color: '#fff' }}>Share</strong> button at the bottom of Safari ⬆️</p>
+              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>2. Scroll down and tap <strong style={{ color: '#fff' }}>"Add to Home Screen"</strong></p>
+              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>3. Tap <strong style={{ color: '#fff' }}>"Add"</strong> in the top right</p>
+            </div>
+          ) : (
+            <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ margin: 0, color: '#999', fontSize: '0.85rem' }}>Add to your home screen for quick access</p>
+              <button onClick={handleInstall}
+                style={{ padding: '0.4rem 0.9rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', marginLeft: '1rem' }}>
+                Install
+              </button>
+            </div>
+          )}
         </div>
       )}
 
