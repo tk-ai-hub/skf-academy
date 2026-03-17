@@ -5,10 +5,7 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 async function getCalendarClient() {
   const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/calendar']
-  })
+  const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/calendar'] })
   return google.calendar({ version: 'v3', auth })
 }
 
@@ -18,13 +15,7 @@ async function findCalendarEvent(calendar, date, studentName) {
     timeMin.setHours(0, 0, 0, 0)
     const timeMax = new Date(`${date}T23:59:59`)
     timeMax.setHours(23, 59, 59, 999)
-
-    const events = await calendar.events.list({
-      calendarId: process.env.GOOGLE_CALENDAR_ID,
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
-      q: studentName
-    })
+    const events = await calendar.events.list({ calendarId: process.env.GOOGLE_CALENDAR_ID, timeMin: timeMin.toISOString(), timeMax: timeMax.toISOString(), q: studentName })
     return events.data.items?.[0] || null
   } catch (err) {
     console.error('Find event error:', err.message)
@@ -35,24 +26,15 @@ async function findCalendarEvent(calendar, date, studentName) {
 async function addToGoogleCalendar(date, hour, studentName, phone) {
   try {
     const calendar = await getCalendarClient()
-
-    // Build datetime string with explicit Pacific time
     const hourPadded = String(hour).padStart(2, '0')
     const endHour = String(hour + 1).padStart(2, '0')
-
     await calendar.events.insert({
       calendarId: process.env.GOOGLE_CALENDAR_ID,
       requestBody: {
         summary: `${studentName} - ${phone}`,
         description: `Private Kung Fu Lesson\nStudent: ${studentName}\nPhone: ${phone}`,
-        start: {
-          dateTime: `${date}T${hourPadded}:00:00`,
-          timeZone: 'America/Vancouver'
-        },
-        end: {
-          dateTime: `${date}T${endHour}:00:00`,
-          timeZone: 'America/Vancouver'
-        }
+        start: { dateTime: `${date}T${hourPadded}:00:00`, timeZone: 'America/Vancouver' },
+        end: { dateTime: `${date}T${endHour}:00:00`, timeZone: 'America/Vancouver' }
       }
     })
   } catch (err) {
@@ -65,10 +47,7 @@ async function deleteFromGoogleCalendar(date, studentName) {
     const calendar = await getCalendarClient()
     const event = await findCalendarEvent(calendar, date, studentName)
     if (event) {
-      await calendar.events.delete({
-        calendarId: process.env.GOOGLE_CALENDAR_ID,
-        eventId: event.id
-      })
+      await calendar.events.delete({ calendarId: process.env.GOOGLE_CALENDAR_ID, eventId: event.id })
     }
   } catch (err) {
     console.error('Delete calendar event error:', err.message)
@@ -76,7 +55,7 @@ async function deleteFromGoogleCalendar(date, studentName) {
 }
 
 export async function POST(request) {
-  const { type, studentEmail, date, time, hour, studentName, phone } = await request.json()
+  const { type, studentEmail, date, time, hour, studentName, phone, subject, body } = await request.json()
   const adminEmail = 'kungfuscheduling@gmail.com'
 
   try {
@@ -84,7 +63,6 @@ export async function POST(request) {
       if (hour && studentName) {
         await addToGoogleCalendar(date, hour, studentName, phone || 'No phone')
       }
-
       await resend.emails.send({
         from: 'SKF Academy <noreply@kungfubc.com>',
         to: studentEmail,
@@ -107,20 +85,11 @@ export async function POST(request) {
           </div>
         `
       })
-
       await resend.emails.send({
         from: 'SKF Academy <noreply@kungfubc.com>',
         to: adminEmail,
         subject: `New Booking — ${studentName || studentEmail}`,
-        html: `
-          <div style="font-family: Georgia, serif; padding: 1.5rem;">
-            <h2>New Lesson Booked</h2>
-            <p><strong>Student:</strong> ${studentName || studentEmail}</p>
-            <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
-            <p><strong>Date:</strong> ${date}</p>
-            <p><strong>Time:</strong> ${time}</p>
-          </div>
-        `
+        html: `<div style="font-family: Georgia, serif; padding: 1.5rem;"><h2>New Lesson Booked</h2><p><strong>Student:</strong> ${studentName || studentEmail}</p><p><strong>Phone:</strong> ${phone || 'Not provided'}</p><p><strong>Date:</strong> ${date}</p><p><strong>Time:</strong> ${time}</p></div>`
       })
     }
 
@@ -128,7 +97,6 @@ export async function POST(request) {
       if (studentName) {
         await deleteFromGoogleCalendar(date, studentName)
       }
-
       await resend.emails.send({
         from: 'SKF Academy <noreply@kungfubc.com>',
         to: studentEmail,
@@ -147,18 +115,28 @@ export async function POST(request) {
           </div>
         `
       })
-
       await resend.emails.send({
         from: 'SKF Academy <noreply@kungfubc.com>',
         to: adminEmail,
         subject: `Cancellation — ${studentName || studentEmail}`,
+        html: `<div style="font-family: Georgia, serif; padding: 1.5rem;"><h2>Lesson Cancelled</h2><p><strong>Student:</strong> ${studentName || studentEmail}</p><p><strong>Phone:</strong> ${phone || 'Not provided'}</p><p><strong>Date:</strong> ${date}</p><p><strong>Time:</strong> ${time}</p></div>`
+      })
+    }
+
+    if (type === 'admin_message') {
+      await resend.emails.send({
+        from: 'SKF Academy <noreply@kungfubc.com>',
+        to: studentEmail,
+        subject: subject || 'Message from SKF Academy',
         html: `
-          <div style="font-family: Georgia, serif; padding: 1.5rem;">
-            <h2>Lesson Cancelled</h2>
-            <p><strong>Student:</strong> ${studentName || studentEmail}</p>
-            <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
-            <p><strong>Date:</strong> ${date}</p>
-            <p><strong>Time:</strong> ${time}</p>
+          <div style="font-family: Georgia, serif; max-width: 500px; margin: 0 auto; background: #1a1a1a; color: #fff; padding: 2rem; border-radius: 8px;">
+            <div style="text-align: center; margin-bottom: 2rem;">
+              <h1 style="color: #cc0000; letter-spacing: 3px; text-transform: uppercase; font-size: 1.5rem;">SKF Academy</h1>
+              <p style="color: #666; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase;">Shaolin Kung Fu — Est. 1986</p>
+            </div>
+            <p style="color: #ccc; font-size: 1rem; line-height: 1.7; white-space: pre-wrap;">${body || ''}</p>
+            <hr style="border-color: #333; margin: 2rem 0;" />
+            <p style="color: #444; font-size: 0.8rem; text-align: center;">SKF Academy · app.kungfubc.com</p>
           </div>
         `
       })
