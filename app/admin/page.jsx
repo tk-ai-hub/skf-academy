@@ -232,9 +232,6 @@ export default function Admin() {
     setMessage(`${slot.slot_date} at ${formatHour(slot.start_hour)} unblocked.`)
     loadData()
   }
-
-  if (!isAuthorized) return null
-
   const today = new Date()
   const referenceDate = new Date(today)
   referenceDate.setDate(today.getDate() + weekOffset * 7)
