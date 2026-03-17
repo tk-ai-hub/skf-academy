@@ -174,6 +174,14 @@ export default function Admin() {
     if (selectedStudent?.id === studentId) setStudentTokens(prev => prev + amount)
   }
 
+
+  async function removeTokens(studentId, amount) {
+    const { data: tenant } = await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()
+    await supabase.from('tokens').insert({ tenant_id: tenant.id, student_id: studentId, amount: -amount, reason: 'removed by admin - bounced payment' })
+    setMessage(`${amount} token(s) removed.`)
+    if (selectedStudent?.id === studentId) setStudentTokens(prev => prev - amount)
+  }
+
   async function sendEmail() {
     if (!emailSubject || !emailBody) { setMessage('Please enter a subject and message.'); return }
     if (selectedStudentIds.length === 0) { setMessage('Please select at least one student.'); return }
@@ -439,6 +447,8 @@ export default function Admin() {
                   <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
                     <button onClick={e => { e.stopPropagation(); addTokens(s.id, 1) }} style={{ padding: '0.3rem 0.7rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>+1</button>
                     <button onClick={e => { e.stopPropagation(); addTokens(s.id, 4) }} style={{ padding: '0.3rem 0.7rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>+4</button>
+                    <button onClick={e => { e.stopPropagation(); removeTokens(s.id, 1) }} style={{ padding: '0.3rem 0.7rem', background: 'transparent', color: '#cc6666', border: '1px solid #663333', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>-1</button>
+                    <button onClick={e => { e.stopPropagation(); removeTokens(s.id, 4) }} style={{ padding: '0.3rem 0.7rem', background: 'transparent', color: '#cc6666', border: '1px solid #663333', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>-4</button>
                   </div>
                 </div>
               )
@@ -493,9 +503,11 @@ export default function Admin() {
                   </div>
 
                   {/* Token buttons */}
-                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                    <button onClick={() => addTokens(selectedStudent.id, 1)} style={{ flex: 1, padding: '0.5rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>+1 Token</button>
-                    <button onClick={() => addTokens(selectedStudent.id, 4)} style={{ flex: 1, padding: '0.5rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>+4 Tokens</button>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <button onClick={() => addTokens(selectedStudent.id, 1)} style={{ flex: 1, padding: '0.5rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>+1</button>
+                    <button onClick={() => addTokens(selectedStudent.id, 4)} style={{ flex: 1, padding: '0.5rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>+4</button>
+                    <button onClick={() => removeTokens(selectedStudent.id, 1)} style={{ flex: 1, padding: '0.5rem', background: 'transparent', color: '#cc6666', border: '1px solid #663333', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>-1</button>
+                    <button onClick={() => removeTokens(selectedStudent.id, 4)} style={{ flex: 1, padding: '0.5rem', background: 'transparent', color: '#cc6666', border: '1px solid #663333', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>-4</button>
                   </div>
 
                   {/* Email */}
