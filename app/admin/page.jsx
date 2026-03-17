@@ -90,9 +90,9 @@ export default function Admin() {
 
   // Admin route protection
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) { window.location.href = '/admin-login'; return }
-      const { data: profile } = await supabase.from('users').select('role').eq('id', session.user.id).single()
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data?.user) { window.location.href = '/admin-login'; return }
+      const { data: profile } = await supabase.from('users').select('role').eq('id', data.user.id).single()
       if (profile?.role !== 'admin') { await supabase.auth.signOut(); window.location.href = '/admin-login'; return }
       setIsAuthorized(true)
     })
