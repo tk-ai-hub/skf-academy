@@ -65,7 +65,23 @@ export default function Admin() {
   // Weekly calendar state
   const [activeTab, setActiveTab] = useState('week') // 'week' | 'bookings' | 'students' | 'block'
   const [weekOffset, setWeekOffset] = useState(0)
+  // Admin route protection
+    useEffect(() => {
+          supabase.auth.getUser().then(async ({ data }) => {
+                  if (!data.user) { window.location.href = '/admin-login'; return }
+                  const { data: profile } = await supabase
+                    .from('users')
+                    .select('role')
+                    .eq('id', data.user.id)
+                    .single()
+                  if (profile?.role !== 'admin') {
+                            await supabase.auth.signOut()
+                            window.location.href = '/admin-login'
+                  }
+          })
+    }, [])
 
+  
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
