@@ -7,7 +7,6 @@ function formatHour(h) {
   if (h === 12) return `12:00 PM`
   return `${h - 12}:00 PM`
 }
-
 function formatDate(d) {
   const date = new Date(d + 'T00:00:00')
   return date.toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
@@ -95,6 +94,16 @@ export default function Book() {
     }
     loadSlots()
   }, [])
+    // Load token balance
+    useEffect(() => {
+          async function loadBalance() {
+                  if (!user) return
+                  const { data } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
+                  const total = (data || []).reduce((sum, t) => sum + t.amount, 0)
+                  setBalance(total)
+          }
+          loadBalance()
+    }, [user])
 
   // Recurring preview
   useEffect(() => {
