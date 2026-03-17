@@ -90,15 +90,20 @@ export default function Admin() {
 
   // Admin route protection
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) { window.location.href = '/admin-login'; return }
-      const { data: profile } = await supabase.from('users').select('role').eq('id', data.user.id).single()
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) { window.location.href = '/admin-login'; return }
+      const { data: profile } = await supabase.from('users').select('role').eq('id', session.user.id).single()
       if (profile?.role !== 'admin') { await supabase.auth.signOut(); window.location.href = '/admin-login'; return }
       setIsAuthorized(true)
     })
   }, [])
 
   useEffect(() => { loadData() }, [])
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    window.location.href = '/admin-login'
+  }
 
   async function loadData() {
     const { data: bookingData } = await supabase
@@ -269,7 +274,10 @@ export default function Admin() {
 
   return (
     <main style={{ fontFamily: 'sans-serif', maxWidth: '900px', margin: '0 auto' }}>
-      <h1 style={{ color: '#fff', borderBottom: '2px solid #cc0000', paddingBottom: '0.5rem' }}>SKF Academy — Admin</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #cc0000', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+        <h1 style={{ color: '#fff', margin: 0 }}>SKF Academy — Admin</h1>
+        <button onClick={handleLogout} style={{ padding: '0.4rem 0.9rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Sign Out</button>
+      </div>
 
       {message && <p style={{ background: '#1a3a1a', border: '1px solid #2a6a2a', padding: '0.75rem', borderRadius: '6px', color: '#66cc66' }}>{message}</p>}
 
