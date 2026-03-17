@@ -27,6 +27,8 @@ function getWeekDates(referenceDate) {
 }
 
 function getUpcomingBirthdays(students) {
+  if (!isAuthorized) return null
+
   const today = new Date()
   const in30 = new Date()
   in30.setDate(today.getDate() + 30)
@@ -57,6 +59,7 @@ function isWithin24Hours(slotDate, slotHour) {
 }
 
 export default function Admin() {
+  const [isAuthorized, setIsAuthorized] = useState(false)
   const [bookings, setBookings] = useState([])
   const [students, setStudents] = useState([])
   const [message, setMessage] = useState('')
@@ -90,7 +93,8 @@ export default function Admin() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { window.location.href = '/admin-login'; return }
       const { data: profile } = await supabase.from('users').select('role').eq('id', data.user.id).single()
-      if (profile?.role !== 'admin') { await supabase.auth.signOut(); window.location.href = '/admin-login' }
+      if (profile?.role !== 'admin') { await supabase.auth.signOut(); window.location.href = '/admin-login'; return }
+      setIsAuthorized(true)
     })
   }, [])
 
@@ -163,7 +167,7 @@ export default function Admin() {
     } else {
       setMessage('Booking cancelled. No token refund — within 24 hours.')
     }
-    loadData()
+    setBookings(prev => prev.filter(b => b.id !== booking.id))
     if (selectedStudent) openStudentProfile(selectedStudent)
   }
 
