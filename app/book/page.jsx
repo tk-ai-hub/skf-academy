@@ -51,7 +51,7 @@ export default function Book() {
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurringWeeks, setRecurringWeeks] = useState(4)
   const [recurringPreview, setRecurringPreview] = useState([])
-  const [confirmingSlot, setConfirmingSlot] = useState(null)
+  const [selectedSlot, setSelectedSlot] = useState(null)   // selected but not yet booked
   const [isProcessing, setIsProcessing] = useState(false)
 
   useEffect(() => {
@@ -96,58 +96,53 @@ export default function Book() {
     loadSlots()
   }, [])
 
+  // Recurring preview
   useEffect(() => {
-    if (!isRecurring || !selectedDate || !confirmingSlot) {
+    if (!isRecurring || !selectedDate || !selectedSlot) {
       setRecurringPreview([])
       return
     }
     const occurrences = getWeeklyOccurrences(selectedDate, recurringWeeks)
     const preview = occurrences.map(date => {
-      const slotOnDate = slots.find(s => s.slot_date === date && s.start_hour === confirmingSlot.start_hour)
+      const slotOnDate = slots.find(s => s.slot_date === date && s.start_hour === selectedSlot.start_hour)
       return { date, available: !!slotOnDate, slot: slotOnDate || null }
     })
     setRecurringPreview(preview)
-  }, [isRecurring, selectedDate, recurringWeeks, confirmingSlot, slots])
+  }, [isRecurring, selectedDate, recurringWeeks, selectedSlot, slots])
 
   const slotsForDate = slots.filter(s => s.slot_date === selectedDate && !bookedIds.includes(s.id))
   const birthdayToday = isBirthday(selectedDate, profile?.date_of_birth)
 
   function handleSlotClick(slot) {
     if (isProcessing) return
-    if (isRecurring) {
-      setConfirmingSlot(slot)
-    } else {
-      bookSlot(slot, false)
-    }
+    // Just select the slot — don't book yet
+    setSelectedSlot(prev => prev?.id === slot.id ? null : slot)
+    setMessage('')
   }
 
-  async function bookSlot(slot, recurring = false, weeks = 1) {
-    if (!user || isProcessing) return
+  async function bookSlot() {
+    if (!user || isProcessing || !selectedSlot) return
     setIsProcessing(true)
     setMessage('')
 
     try {
-      const { data: tokenData } = await supabase
-        .from('tokens')
-        .select('amount')
-        .eq('student_id', user.id)
+      const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
       const currentBalance = (tokenData || []).reduce((sum, t) => sum + t.amount, 0)
 
-      if (recurring) {
-        const occurrences = getWeeklyOccurrences(slot.slot_date, weeks)
+      if (isRecurring) {
+        const occurrences = getWeeklyOccurrences(selectedSlot.slot_date, recurringWeeks)
         const availableSlots = []
         for (const date of occurrences) {
-          const s = slots.find(s2 => s2.slot_date === date && s2.start_hour === slot.start_hour)
+          const s = slots.find(s2 => s2.slot_date === date && s2.start_hour === selectedSlot.start_hour)
           if (s && !bookedIds.includes(s.id)) availableSlots.push(s)
         }
         if (currentBalance < availableSlots.length) {
-          setMessage(`You only have ${currentBalance} token(s) but need ${availableSlots.length} for ${availableSlots.length} recurring lessons. Please add more tokens or reduce the number of weeks.`)
-          setConfirmingSlot(null)
+          setMessage(`You only have ${currentBalance} token(s) but need ${availableSlots.length} for ${availableSlots.length} recurring lessons.`)
           return
         }
         const studentName = profile?.first_name ? `${profile.last_name || ''} ${profile.first_name}`.trim() : user.email
         const newBookedIds = []
-        const groupId = slot.id + '-' + Date.now()
+        const groupId = selectedSlot.id + '-' + Date.now()
         for (const s of availableSlots) {
           const { data: newBooking, error } = await supabase
             .from('bookings')
@@ -161,8 +156,8 @@ export default function Book() {
         }
         setBalance(currentBalance - newBookedIds.length)
         setBookedIds(prev => [...prev, ...newBookedIds])
-        setConfirmingSlot(null)
-        setMessage(`✅ Booked ${newBookedIds.length} recurring lesson${newBookedIds.length > 1 ? 's' : ''} every week at ${formatHour(slot.start_hour)}!`)
+        setSelectedSlot(null)
+        setMessage(`✅ Booked ${newBookedIds.length} recurring lesson${newBookedIds.length > 1 ? 's' : ''} every week at ${formatHour(selectedSlot.start_hour)}!`)
       } else {
         if (currentBalance <= 0) {
           setMessage('You have no tokens left. Please contact your instructor to add more.')
@@ -170,23 +165,29 @@ export default function Book() {
         }
         const { data: newBooking, error } = await supabase
           .from('bookings')
-          .insert({ tenant_id: slot.tenant_id, student_id: user.id, slot_id: slot.id, status: 'confirmed' })
+          .insert({ tenant_id: selectedSlot.tenant_id, student_id: user.id, slot_id: selectedSlot.id, status: 'confirmed' })
           .select().single()
         if (error) { setMessage('Could not book this slot. ' + error.message); return }
-        await supabase.from('tokens').insert({ tenant_id: slot.tenant_id, student_id: user.id, amount: -1, reason: 'lesson booked', booking_id: newBooking.id })
+        await supabase.from('tokens').insert({ tenant_id: selectedSlot.tenant_id, student_id: user.id, amount: -1, reason: 'lesson booked', booking_id: newBooking.id })
         const studentName = profile?.first_name ? `${profile.last_name || ''} ${profile.first_name}`.trim() : user.email
-        await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'booking', studentEmail: user.email, studentName, phone: profile?.phone || '', date: slot.slot_date, time: formatHour(slot.start_hour), hour: slot.start_hour }) })
+        await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'booking', studentEmail: user.email, studentName, phone: profile?.phone || '', date: selectedSlot.slot_date, time: formatHour(selectedSlot.start_hour), hour: selectedSlot.start_hour }) })
         setBalance(currentBalance - 1)
-        setBookedIds(prev => [...prev, slot.id])
-        setMessage(`Booked! See you ${formatDate(selectedDate)} at ${formatHour(slot.start_hour)}`)
+        setBookedIds(prev => [...prev, selectedSlot.id])
+        setSelectedSlot(null)
+        setMessage(`✅ Booked! See you ${formatDate(selectedDate)} at ${formatHour(selectedSlot.start_hour)}`)
       }
     } finally {
       setIsProcessing(false)
     }
   }
 
+  const availableCount = isRecurring && selectedSlot
+    ? recurringPreview.filter(p => p.available).length
+    : 0
+
   return (
     <main>
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <h2 style={{ color: '#fff', margin: 0, letterSpacing: '1px', textTransform: 'uppercase' }}>Book a Private Lesson</h2>
         <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', borderRadius: '6px', padding: '0.5rem 1rem', textAlign: 'center' }}>
@@ -195,28 +196,31 @@ export default function Book() {
         </div>
       </div>
 
+      {/* Date Selector */}
       <div style={{ marginBottom: '1.5rem' }}>
         <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Select a Date</label>
-        <select value={selectedDate} onChange={e => { setSelectedDate(e.target.value); setConfirmingSlot(null) }} style={{ width: '100%', padding: '0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '1rem' }}>
+        <select value={selectedDate} onChange={e => { setSelectedDate(e.target.value); setSelectedSlot(null) }} style={{ width: '100%', padding: '0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '1rem' }}>
           {availableDates.map(d => (
             <option key={d} value={d}>{formatDate(d)}{isBirthday(d, profile?.date_of_birth) ? ' 🎂' : ''}</option>
           ))}
         </select>
       </div>
 
+      {/* Birthday Banner */}
       {birthdayToday && (
         <div style={{ background: '#2a1a1a', border: '1px solid #cc0000', borderRadius: '8px', padding: '0.75rem 1.5rem', marginBottom: '1.5rem', textAlign: 'center' }}>
           <p style={{ margin: 0, color: '#cc0000' }}>Happy Birthday{profile?.first_name ? `, ${profile.first_name}` : ''}! Book a special lesson today! 🎂</p>
         </div>
       )}
 
+      {/* Recurring Toggle */}
       <div style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>Recurring Weekly Booking</div>
             <div style={{ color: '#666', fontSize: '0.8rem', marginTop: '0.2rem' }}>Book the same time slot every week</div>
           </div>
-          <button onClick={() => { setIsRecurring(!isRecurring); setConfirmingSlot(null) }} style={{ width: '48px', height: '26px', borderRadius: '13px', border: 'none', cursor: 'pointer', background: isRecurring ? '#cc0000' : '#444', position: 'relative', transition: 'background 0.2s' }}>
+          <button onClick={() => { setIsRecurring(!isRecurring); setSelectedSlot(null) }} style={{ width: '48px', height: '26px', borderRadius: '13px', border: 'none', cursor: 'pointer', background: isRecurring ? '#cc0000' : '#444', position: 'relative', transition: 'background 0.2s' }}>
             <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '3px', transition: 'left 0.2s', left: isRecurring ? '25px' : '3px' }} />
           </button>
         </div>
@@ -233,38 +237,45 @@ export default function Book() {
         )}
       </div>
 
+      {/* Time Slots */}
       <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1rem' }}>Available Times</label>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        {slotsForDate.map(slot => (
-          <button
-            key={slot.id}
-            onClick={() => handleSlotClick(slot)}
-            disabled={isProcessing}
-            style={{
-              padding: '0.85rem',
-              background: confirmingSlot?.id === slot.id ? '#3a0000' : '#2a2a2a',
-              color: isProcessing ? '#555' : '#fff',
-              border: confirmingSlot?.id === slot.id ? '1px solid #cc0000' : '1px solid #444',
-              borderRadius: '6px',
-              cursor: isProcessing ? 'not-allowed' : 'pointer',
-              fontSize: '0.9rem',
-              opacity: isProcessing ? 0.6 : 1
-            }}
-            onMouseEnter={e => { if (!isProcessing) e.currentTarget.style.borderColor = '#cc0000' }}
-            onMouseLeave={e => { if (!isProcessing) e.currentTarget.style.borderColor = confirmingSlot?.id === slot.id ? '#cc0000' : '#444' }}
-          >
-            {formatHour(slot.start_hour)}
-          </button>
-        ))}
+        {slotsForDate.map(slot => {
+          const isSelected = selectedSlot?.id === slot.id
+          return (
+            <button
+              key={slot.id}
+              onClick={() => handleSlotClick(slot)}
+              disabled={isProcessing}
+              style={{
+                padding: '0.85rem',
+                background: isSelected ? '#cc0000' : '#2a2a2a',
+                color: '#fff',
+                border: isSelected ? '1px solid #cc0000' : '1px solid #444',
+                borderRadius: '6px',
+                cursor: isProcessing ? 'not-allowed' : 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: isSelected ? 'bold' : 'normal',
+                transform: isSelected ? 'scale(1.05)' : 'scale(1)',
+                transition: 'all 0.15s',
+                opacity: isProcessing ? 0.6 : 1
+              }}
+            >
+              {formatHour(slot.start_hour)}
+              {isSelected && <div style={{ fontSize: '0.65rem', marginTop: '2px', opacity: 0.85 }}>✓ selected</div>}
+            </button>
+          )
+        })}
         {slotsForDate.length === 0 && <p style={{ color: '#666', gridColumn: '1 / -1', margin: 0 }}>No available times for this date.</p>}
       </div>
 
-      {isRecurring && confirmingSlot && recurringPreview.length > 0 && (
-        <div style={{ background: '#1a1a1a', border: '1px solid #cc0000', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+      {/* Recurring Preview (shows when recurring + slot selected) */}
+      {isRecurring && selectedSlot && recurringPreview.length > 0 && (
+        <div style={{ background: '#1a1a1a', border: '1px solid #444', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' }}>
           <h3 style={{ color: '#fff', margin: '0 0 1rem', fontSize: '1rem', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            📅 Recurring Preview — {formatHour(confirmingSlot.start_hour)} Weekly
+            📅 Recurring Preview — {formatHour(selectedSlot.start_hour)} Weekly
           </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             {recurringPreview.map(({ date, available }) => (
               <div key={date} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <span style={{ color: available ? '#66cc66' : '#cc6666', fontSize: '0.85rem', width: '16px' }}>{available ? '✓' : '✗'}</span>
@@ -273,24 +284,46 @@ export default function Book() {
               </div>
             ))}
           </div>
-          <div style={{ color: '#999', fontSize: '0.85rem', marginBottom: '1rem' }}>
-            {recurringPreview.filter(p => p.available).length} of {recurringWeeks} slots available · <span style={{ color: '#cc0000' }}>{recurringPreview.filter(p => p.available).length} tokens</span>
+          <div style={{ color: '#999', fontSize: '0.85rem', marginTop: '0.75rem' }}>
+            {availableCount} of {recurringWeeks} slots available · <span style={{ color: '#cc0000' }}>{availableCount} tokens</span>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Booking Bar — appears when a slot is selected */}
+      {selectedSlot && (
+        <div style={{ background: '#1a1a1a', border: '1px solid #cc0000', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ color: '#999', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Selected</div>
+            <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.05rem' }}>
+              {formatDate(selectedDate)} at {formatHour(selectedSlot.start_hour)}
+            </div>
+            {isRecurring && (
+              <div style={{ color: '#cc0000', fontSize: '0.8rem', marginTop: '0.2rem' }}>
+                🔁 {availableCount} weekly lessons · {availableCount} tokens
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <button
-              onClick={() => bookSlot(confirmingSlot, true, recurringWeeks)}
+              onClick={() => { setSelectedSlot(null); setMessage('') }}
               disabled={isProcessing}
-              style={{ padding: '0.7rem 1.5rem', background: isProcessing ? '#661111' : '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: isProcessing ? 'not-allowed' : 'pointer', fontWeight: 'bold', opacity: isProcessing ? 0.7 : 1 }}
+              style={{ padding: '0.6rem 1.1rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem' }}
             >
-              {isProcessing ? 'Booking...' : `Confirm ${recurringPreview.filter(p => p.available).length} Bookings`}
+              Clear
             </button>
-            <button onClick={() => setConfirmingSlot(null)} disabled={isProcessing} style={{ padding: '0.7rem 1rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer' }}>
-              Cancel
+            <button
+              onClick={bookSlot}
+              disabled={isProcessing}
+              style={{ padding: '0.6rem 1.5rem', background: isProcessing ? '#661111' : '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: isProcessing ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.95rem', opacity: isProcessing ? 0.7 : 1 }}
+            >
+              {isProcessing ? 'Booking...' : isRecurring ? `Confirm ${availableCount} Bookings` : 'Confirm Booking'}
             </button>
           </div>
         </div>
       )}
 
+      {/* Message */}
       {message && (
         <div style={{ background: '#1a3a1a', border: '1px solid #2a6a2a', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
           <p style={{ margin: 0, color: '#66cc66', fontWeight: 'bold' }}>{message}</p>
