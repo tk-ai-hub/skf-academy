@@ -43,6 +43,11 @@ export default function Dashboard() {
     load()
   }, [])
 
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
+
   function handleCancelClick(booking) {
     if (isProcessing) return
     const within24 = isWithin24Hours(booking.slots.slot_date, booking.slots.start_hour)
@@ -132,10 +137,13 @@ export default function Dashboard() {
   return (
     <main>
       {user && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          <p style={{ color: '#999', margin: 0 }}>Welcome back,</p>
-          <h2 style={{ color: '#fff', margin: '0.25rem 0 0', fontSize: '1.5rem' }}>{displayName}</h2>
-          {profile?.belt_rank && <p style={{ color: '#cc0000', fontSize: '0.8rem', letterSpacing: '2px', textTransform: 'uppercase', margin: '0.25rem 0 0' }}>{profile.belt_rank} belt</p>}
+        <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <p style={{ color: '#999', margin: 0 }}>Welcome back,</p>
+            <h2 style={{ color: '#fff', margin: '0.25rem 0 0', fontSize: '1.5rem' }}>{displayName}</h2>
+            {profile?.belt_rank && <p style={{ color: '#cc0000', fontSize: '0.8rem', letterSpacing: '2px', textTransform: 'uppercase', margin: '0.25rem 0 0' }}>{profile.belt_rank} belt</p>}
+          </div>
+          <button onClick={handleLogout} style={{ padding: '0.4rem 0.9rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Sign Out</button>
         </div>
       )}
 

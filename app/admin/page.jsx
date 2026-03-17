@@ -100,6 +100,11 @@ export default function Admin() {
 
   useEffect(() => { loadData() }, [])
 
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    window.location.href = '/admin-login'
+  }
+
   async function loadData() {
     const { data: bookingData } = await supabase
       .from('bookings')
@@ -160,6 +165,8 @@ export default function Admin() {
   async function cancelBooking(booking) {
     const within24 = isWithin24Hours(booking.slots?.slot_date, booking.slots?.start_hour)
     await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin', cancelled_within_24h: within24 }).eq('id', booking.id)
+    // Remove from local state immediately so calendar updates right away
+    setBookings(prev => prev.filter(b => b.id !== booking.id))
     // Only refund if NOT within 24 hours
     if (!within24) {
       await supabase.from('tokens').insert({ tenant_id: booking.tenant_id, student_id: booking.student_id, amount: 1, reason: 'cancelled by admin - refund', booking_id: booking.id })
@@ -167,7 +174,6 @@ export default function Admin() {
     } else {
       setMessage('Booking cancelled. No token refund — within 24 hours.')
     }
-    setBookings(prev => prev.filter(b => b.id !== booking.id))
     if (selectedStudent) openStudentProfile(selectedStudent)
   }
 
@@ -231,6 +237,8 @@ export default function Admin() {
     loadData()
   }
 
+  if (!isAuthorized) return null
+
   const today = new Date()
   const referenceDate = new Date(today)
   referenceDate.setDate(today.getDate() + weekOffset * 7)
@@ -266,7 +274,10 @@ export default function Admin() {
 
   return (
     <main style={{ fontFamily: 'sans-serif', maxWidth: '900px', margin: '0 auto' }}>
-      <h1 style={{ color: '#fff', borderBottom: '2px solid #cc0000', paddingBottom: '0.5rem' }}>SKF Academy — Admin</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #cc0000', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+        <h1 style={{ color: '#fff', margin: 0 }}>SKF Academy — Admin</h1>
+        <button onClick={handleLogout} style={{ padding: '0.4rem 0.9rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Sign Out</button>
+      </div>
 
       {message && <p style={{ background: '#1a3a1a', border: '1px solid #2a6a2a', padding: '0.75rem', borderRadius: '6px', color: '#66cc66' }}>{message}</p>}
 
