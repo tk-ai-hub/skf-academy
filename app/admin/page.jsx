@@ -188,8 +188,11 @@ export default function Admin() {
   async function addTokens(studentId, amount) {
     const { data: tenant } = await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()
     await supabase.from('tokens').insert({ tenant_id: tenant.id, student_id: studentId, amount, reason: 'added by admin' })
-    setMessage(`${amount} token(s) added.`)
     if (selectedStudent?.id === studentId) setStudentTokens(prev => prev + amount)
+    // Auto-fulfill any pending recurring slots
+    const res = await fetch('/api/fulfill-pending', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId }) })
+    const { fulfilled } = await res.json()
+    setMessage(fulfilled > 0 ? `${amount} token(s) added. ${fulfilled} pending recurring slot${fulfilled > 1 ? 's' : ''} auto-confirmed.` : `${amount} token(s) added.`)
   }
 
 

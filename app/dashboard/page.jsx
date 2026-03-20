@@ -33,7 +33,7 @@ export default function Dashboard() {
         .from('bookings')
         .select(`id, status, booked_at, tenant_id, student_id, is_recurring, recurring_group_id, slots!bookings_slot_id_fkey ( id, slot_date, start_hour )`)
         .eq('student_id', user.id)
-        .eq('status', 'confirmed')
+        .in('status', ['confirmed', 'pending_token'])
         .order('booked_at', { ascending: true })
       setBookings((bookingData || []).filter(b => b.slots))
       const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
@@ -51,14 +51,15 @@ export default function Dashboard() {
   function handleCancelClick(booking) {
     if (isProcessing) return
     const within24 = isWithin24Hours(booking.slots.slot_date, booking.slots.start_hour)
+    const isPending = booking.status === 'pending_token'
     if (booking.is_recurring && booking.recurring_group_id) {
       const seriesBookings = bookings.filter(b => b.recurring_group_id === booking.recurring_group_id && b.id !== booking.id)
       if (seriesBookings.length > 0) {
-        setCancelPrompt({ booking, hasSeries: true, seriesCount: seriesBookings.length + 1, within24 })
+        setCancelPrompt({ booking, hasSeries: true, seriesCount: seriesBookings.length + 1, within24, isPending })
         return
       }
     }
-    setCancelPrompt({ booking, hasSeries: false, within24 })
+    setCancelPrompt({ booking, hasSeries: false, within24, isPending })
   }
 
   async function doCancel(booking, cancelSeries) {
@@ -74,7 +75,7 @@ export default function Dashboard() {
         for (const b of seriesBookings) {
           const within24 = isWithin24Hours(b.slots.slot_date, b.slots.start_hour)
           await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_within_24h: within24 }).eq('id', b.id)
-          if (!within24) {
+          if (b.status === 'confirmed' && !within24) {
             await supabase.from('tokens').insert({ tenant_id: b.tenant_id, student_id: b.student_id, amount: 1, reason: 'recurring series cancelled - refund', booking_id: b.id })
             refunded++
           }
@@ -85,7 +86,7 @@ export default function Dashboard() {
       } else {
         const within24 = isWithin24Hours(booking.slots.slot_date, booking.slots.start_hour)
         await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_within_24h: within24 }).eq('id', booking.id)
-        if (!within24) {
+        if (booking.status === 'confirmed' && !within24) {
           await supabase.from('tokens').insert({ tenant_id: booking.tenant_id, student_id: booking.student_id, amount: 1, reason: 'lesson cancelled - refund', booking_id: booking.id })
           setBalance(prev => prev + 1)
         }
@@ -160,7 +161,12 @@ export default function Dashboard() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div style={{ background: '#1a1a1a', border: '1px solid #cc0000', borderRadius: '12px', padding: '1.75rem', maxWidth: '400px', width: '100%' }}>
             <h3 style={{ color: '#fff', margin: '0 0 0.5rem', fontSize: '1.1rem' }}>Cancel Booking</h3>
-            {cancelPrompt.within24 && (
+            {cancelPrompt.isPending && (
+              <div style={{ background: '#1e1a00', border: '1px solid #665500', borderRadius: '6px', padding: '0.75rem', marginBottom: '1rem' }}>
+                <p style={{ margin: 0, color: '#ffdd44', fontSize: '0.85rem' }}>This slot is reserved but no token has been charged yet. Cancelling releases the reservation.</p>
+              </div>
+            )}
+            {!cancelPrompt.isPending && cancelPrompt.within24 && (
               <div style={{ background: '#2a1500', border: '1px solid #aa6600', borderRadius: '6px', padding: '0.75rem', marginBottom: '1rem' }}>
                 <p style={{ margin: 0, color: '#ffaa44', fontSize: '0.85rem' }}>⚠️ This lesson is within 24 hours. Your token will <strong>not</strong> be refunded.</p>
               </div>
@@ -207,15 +213,19 @@ export default function Dashboard() {
           if (group.type === 'single') {
             const b = group.booking
             const within24 = isWithin24Hours(b.slots.slot_date, b.slots.start_hour)
+            const isPending = b.status === 'pending_token'
             return (
-              <div key={b.id} style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div key={b.id} style={{ background: isPending ? '#1e1a00' : '#2a2a2a', border: `1px solid ${isPending ? '#665500' : '#333'}`, borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1.1rem', color: '#fff' }}>{b.slots.slot_date} at {formatHour(b.slots.start_hour)}</p>
-                  <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.85rem' }}>Private Lesson</p>
-                  {within24 && <p style={{ margin: '0.2rem 0 0', color: '#aa6600', fontSize: '0.78rem' }}>⚠️ Within 24hrs — no refund if cancelled</p>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.2rem' }}>
+                    <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1.1rem', color: '#fff' }}>{b.slots.slot_date} at {formatHour(b.slots.start_hour)}</p>
+                    {isPending && <span style={{ background: '#665500', color: '#ffdd44', fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Awaiting Token</span>}
+                  </div>
+                  <p style={{ margin: 0, color: '#666', fontSize: '0.85rem' }}>{isPending ? 'Slot reserved — will confirm when token is added' : 'Private Lesson'}</p>
+                  {!isPending && within24 && <p style={{ margin: '0.2rem 0 0', color: '#aa6600', fontSize: '0.78rem' }}>⚠️ Within 24hrs — no refund if cancelled</p>}
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button onClick={() => handleReschedule(b)} disabled={isProcessing} style={{ padding: '0.4rem 1rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.9rem', cursor: 'pointer' }}>Reschedule</button>
+                  {!isPending && <button onClick={() => handleReschedule(b)} disabled={isProcessing} style={{ padding: '0.4rem 1rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.9rem', cursor: 'pointer' }}>Reschedule</button>}
                   <button onClick={() => handleCancelClick(b)} disabled={isProcessing} style={{ padding: '0.4rem 1rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem' }}>Cancel</button>
                 </div>
               </div>
@@ -223,6 +233,7 @@ export default function Dashboard() {
           }
 
           const { bookings: series, groupId } = group
+          const pendingInSeries = series.filter(b => b.status === 'pending_token').length
           return (
             <div key={groupId} style={{ border: '1px solid #444', borderRadius: '10px', marginBottom: '1.25rem', overflow: 'hidden' }}>
               <div style={{ background: '#2a1a1a', borderBottom: '1px solid #333', padding: '0.6rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -230,16 +241,21 @@ export default function Dashboard() {
                   <span style={{ color: '#cc0000', fontSize: '0.8rem' }}>🔁</span>
                   <span style={{ color: '#cc0000', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>Weekly Recurring — {formatHour(series[0].slots.start_hour)}</span>
                 </div>
-                <span style={{ color: '#666', fontSize: '0.8rem' }}>{series.length} lessons</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {pendingInSeries > 0 && <span style={{ background: '#665500', color: '#ffdd44', fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 'bold' }}>{pendingInSeries} pending</span>}
+                  <span style={{ color: '#666', fontSize: '0.8rem' }}>{series.length} lessons</span>
+                </div>
               </div>
               {series.map((b, i) => {
                 const within24 = isWithin24Hours(b.slots.slot_date, b.slots.start_hour)
+                const isPending = b.status === 'pending_token'
                 return (
-                  <div key={b.id} style={{ background: i % 2 === 0 ? '#222' : '#1e1e1e', padding: '0.75rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: i < series.length - 1 ? '1px solid #2a2a2a' : 'none' }}>
-                    <div>
+                  <div key={b.id} style={{ background: isPending ? '#1a1800' : (i % 2 === 0 ? '#222' : '#1e1e1e'), padding: '0.75rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: i < series.length - 1 ? '1px solid #2a2a2a' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>{b.slots.slot_date}</span>
-                      <span style={{ color: '#666', fontSize: '0.85rem', marginLeft: '0.5rem' }}>at {formatHour(b.slots.start_hour)}</span>
-                      {within24 && <span style={{ color: '#aa6600', fontSize: '0.75rem', marginLeft: '0.5rem' }}>⚠️ no refund</span>}
+                      <span style={{ color: '#666', fontSize: '0.85rem' }}>at {formatHour(b.slots.start_hour)}</span>
+                      {isPending && <span style={{ background: '#665500', color: '#ffdd44', fontSize: '0.65rem', padding: '0.1rem 0.4rem', borderRadius: '3px', fontWeight: 'bold', textTransform: 'uppercase' }}>Awaiting Token</span>}
+                      {!isPending && within24 && <span style={{ color: '#aa6600', fontSize: '0.75rem' }}>⚠️ no refund</span>}
                     </div>
                     <button onClick={() => handleCancelClick(b)} disabled={isProcessing} style={{ padding: '0.3rem 0.75rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
                   </div>

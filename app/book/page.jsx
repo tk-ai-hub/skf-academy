@@ -80,7 +80,7 @@ export default function Book() {
       const { data: existingBookings } = await supabase
         .from('bookings')
         .select('slot_id')
-        .eq('status', 'confirmed')
+        .in('status', ['confirmed', 'pending_token'])
       const alreadyBooked = (existingBookings || []).map(b => b.slot_id)
       setBookedIds(alreadyBooked)
       const today = new Date().toISOString().split('T')[0]
@@ -164,28 +164,43 @@ export default function Book() {
           const s = slots.find(s2 => s2.slot_date === date && s2.start_hour === selectedSlot.start_hour)
           if (s && !bookedIds.includes(s.id) && !isWithin24Hours(date, selectedSlot.start_hour)) availableSlots.push(s)
         }
-        if (currentBalance < availableSlots.length) {
-          setMessage(`You only have ${currentBalance} token(s) but need ${availableSlots.length}.`)
+        if (availableSlots.length === 0) {
+          setMessage('No available slots found for this recurring series.')
           return
         }
         const studentName = profile?.first_name ? `${profile.last_name || ''} ${profile.first_name}`.trim() : user.email
         const newBookedIds = []
+        let tokensUsed = 0
+        let pendingCount = 0
         const groupId = selectedSlot.id + '-' + Date.now()
+        let remainingBalance = currentBalance
         for (const s of availableSlots) {
+          const hasToken = remainingBalance > 0
+          const status = hasToken ? 'confirmed' : 'pending_token'
           const { data: newBooking, error } = await supabase
             .from('bookings')
-            .insert({ tenant_id: s.tenant_id, student_id: user.id, slot_id: s.id, status: 'confirmed', is_recurring: true, recurring_group_id: groupId })
+            .insert({ tenant_id: s.tenant_id, student_id: user.id, slot_id: s.id, status, is_recurring: true, recurring_group_id: groupId })
             .select().single()
           if (!error && newBooking) {
-            await supabase.from('tokens').insert({ tenant_id: s.tenant_id, student_id: user.id, amount: -1, reason: 'recurring lesson booked', booking_id: newBooking.id })
+            if (hasToken) {
+              await supabase.from('tokens').insert({ tenant_id: s.tenant_id, student_id: user.id, amount: -1, reason: 'recurring lesson booked', booking_id: newBooking.id })
+              remainingBalance--
+              tokensUsed++
+              await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'booking', studentEmail: user.email, studentName, phone: profile?.phone || '', date: s.slot_date, time: formatHour(s.start_hour), hour: s.start_hour }) })
+            } else {
+              pendingCount++
+            }
             newBookedIds.push(s.id)
-            await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'booking', studentEmail: user.email, studentName, phone: profile?.phone || '', date: s.slot_date, time: formatHour(s.start_hour), hour: s.start_hour, isRecurring: true, totalOccurrences: availableSlots.length }) })
           }
         }
-        setBalance(currentBalance - newBookedIds.length)
+        setBalance(currentBalance - tokensUsed)
         setBookedIds(prev => [...prev, ...newBookedIds])
         setSelectedSlot(null)
-        setMessage(`✅ Booked ${newBookedIds.length} recurring lesson${newBookedIds.length > 1 ? 's' : ''} every week at ${formatHour(selectedSlot.start_hour)}!`)
+        if (pendingCount > 0) {
+          setMessage(`✅ Reserved ${newBookedIds.length} weekly slots at ${formatHour(selectedSlot.start_hour)}. ${tokensUsed} confirmed now, ${pendingCount} will auto-confirm as tokens are added.`)
+        } else {
+          setMessage(`✅ Booked ${tokensUsed} recurring lesson${tokensUsed > 1 ? 's' : ''} every week at ${formatHour(selectedSlot.start_hour)}!`)
+        }
       } else {
         if (currentBalance <= 0) { setMessage('You have no tokens left. Please contact your instructor to add more.'); return }
         const { data: newBooking, error } = await supabase
