@@ -6,7 +6,7 @@ export async function POST(request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  const { userId, email, firstName, lastName, phone, dob } = await request.json()
+  const { userId, email, firstName, lastName, phone, dob, trialToken } = await request.json()
 
   if (!userId || !email) return Response.json({ error: 'userId and email are required' }, { status: 400 })
 
@@ -29,5 +29,15 @@ export async function POST(request) {
   })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  if (trialToken) {
+    await supabaseAdmin.from('tokens').insert({
+      tenant_id: tenant?.id,
+      student_id: userId,
+      amount: 1,
+      reason: 'free trial lesson'
+    })
+  }
+
   return Response.json({ success: true })
 }
