@@ -87,11 +87,8 @@ export default function AdminBook() {
   // Load students and slots
   useEffect(() => {
     async function load() {
-      const { data: studentData } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, full_name, email, phone')
-        .neq('role', 'admin')
-        .order('first_name', { ascending: true })
+      const studentsRes = await fetch('/api/admin/students')
+      const studentData = studentsRes.ok ? await studentsRes.json() : []
       setAllStudents(studentData || [])
 
       const { data: bookedData } = await supabase

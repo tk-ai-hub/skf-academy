@@ -109,11 +109,8 @@ export default function Admin() {
       .order('booked_at', { ascending: false })
     setBookings((bookingData || []).filter(b => b.slots))
 
-    const { data: studentData } = await supabase
-      .from('users')
-      .select('id, full_name, first_name, last_name, email, phone, belt_rank, date_of_birth')
-      .neq('role', 'admin')
-      .order('first_name', { ascending: true })
+    const studentsRes = await fetch('/api/admin/students')
+    const studentData = studentsRes.ok ? await studentsRes.json() : []
     setStudents(studentData || [])
 
     const { data: rangeData } = await supabase.from('blocked_ranges').select('*').order('start_date', { ascending: true })
