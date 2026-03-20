@@ -112,7 +112,7 @@ export default function Admin() {
     const { data: studentData } = await supabase
       .from('users')
       .select('id, full_name, first_name, last_name, email, phone, belt_rank, date_of_birth')
-      .eq('role', 'student')
+      .neq('role', 'admin')
       .order('first_name', { ascending: true })
     setStudents(studentData || [])
 
@@ -274,11 +274,12 @@ export default function Admin() {
 
       {message && <p style={{ background: '#1a3a1a', border: '1px solid #2a6a2a', padding: '0.75rem', borderRadius: '6px', color: '#66cc66' }}>{message}</p>}
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <button style={tabStyle('week')} onClick={() => setActiveTab('week')}>📅 Week View</button>
         <button style={tabStyle('bookings')} onClick={() => setActiveTab('bookings')}>📋 All Bookings</button>
         <button style={tabStyle('students')} onClick={() => setActiveTab('students')}>👥 Students</button>
         <button style={tabStyle('block')} onClick={() => setActiveTab('block')}>🔒 Block Dates</button>
+        <a href="/admin/book" style={{ marginLeft: 'auto', padding: '0.5rem 1.1rem', background: '#cc0000', color: '#fff', border: '1px solid #cc0000', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '0.5px', textDecoration: 'none' }}>+ Book a Lesson</a>
       </div>
 
       {/* ── WEEK VIEW ── */}
