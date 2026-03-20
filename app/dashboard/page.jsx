@@ -148,12 +148,15 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', padding: '1rem 1.5rem', borderRadius: '8px', marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="token-badge" style={{ marginBottom: '2rem' }}>
         <div>
-          <div style={{ color: '#cc0000', fontSize: '0.75rem', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Lesson Tokens</div>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#fff' }}>{balance}</div>
+          <div style={{ color: 'var(--red)', fontSize: '0.7rem', letterSpacing: '2px', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.25rem' }}>Lesson Tokens</div>
+          <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#fff', lineHeight: 1 }}>{balance}</div>
         </div>
-        <div style={{ color: '#666', fontSize: '0.85rem', textAlign: 'right' }}>Renew monthly<br /><span style={{ color: '#cc0000' }}>4 tokens/month</span></div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ color: 'var(--text3)', fontSize: '0.78rem' }}>Monthly renewal</div>
+          <div style={{ color: 'var(--red)', fontSize: '0.85rem', fontWeight: 600 }}>4 tokens / month</div>
+        </div>
       </div>
 
       {/* Cancel Prompt Modal */}
@@ -204,7 +207,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <h2 style={{ color: '#fff', borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>Upcoming Lessons</h2>
+      <h2 style={{ color: 'var(--text)', borderBottom: '1px solid var(--border)', paddingBottom: '0.6rem', marginBottom: '1.25rem', fontSize: '1.1rem', letterSpacing: '0.5px', textTransform: 'uppercase', fontFamily: 'Georgia, serif' }}>Upcoming Lessons</h2>
 
       {grouped.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
@@ -215,18 +218,24 @@ export default function Dashboard() {
             const within24 = isWithin24Hours(b.slots.slot_date, b.slots.start_hour)
             const isPending = b.status === 'pending_token'
             return (
-              <div key={b.id} style={{ background: isPending ? '#1e1a00' : '#2a2a2a', border: `1px solid ${isPending ? '#665500' : '#333'}`, borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.2rem' }}>
-                    <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1.1rem', color: '#fff' }}>{b.slots.slot_date} at {formatHour(b.slots.start_hour)}</p>
-                    {isPending && <span style={{ background: '#665500', color: '#ffdd44', fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Awaiting Token</span>}
+              <div key={b.id} className={`booking-card${isPending ? ' pending' : ''}`}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                      <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text)' }}>{b.slots.slot_date}</span>
+                      <span style={{ color: 'var(--red)', fontWeight: 600 }}>·</span>
+                      <span style={{ color: 'var(--red)', fontWeight: 600, fontSize: '1rem' }}>{formatHour(b.slots.start_hour)}</span>
+                      {isPending && <span className="badge badge-pending">Awaiting Token</span>}
+                    </div>
+                    <p style={{ margin: 0, color: 'var(--text3)', fontSize: '0.82rem' }}>
+                      {isPending ? 'Reserved · confirms automatically when token is added' : 'Private Lesson'}
+                    </p>
+                    {!isPending && within24 && <p style={{ margin: '0.3rem 0 0', color: '#f97316', fontSize: '0.78rem' }}>⚠️ Within 24 hrs — no refund if cancelled</p>}
                   </div>
-                  <p style={{ margin: 0, color: '#666', fontSize: '0.85rem' }}>{isPending ? 'Slot reserved — will confirm when token is added' : 'Private Lesson'}</p>
-                  {!isPending && within24 && <p style={{ margin: '0.2rem 0 0', color: '#aa6600', fontSize: '0.78rem' }}>⚠️ Within 24hrs — no refund if cancelled</p>}
-                </div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  {!isPending && <button onClick={() => handleReschedule(b)} disabled={isProcessing} style={{ padding: '0.4rem 1rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.9rem', cursor: 'pointer' }}>Reschedule</button>}
-                  <button onClick={() => handleCancelClick(b)} disabled={isProcessing} style={{ padding: '0.4rem 1rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem' }}>Cancel</button>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                    {!isPending && <button onClick={() => handleReschedule(b)} disabled={isProcessing} style={{ padding: '0.45rem 0.9rem', background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>Reschedule</button>}
+                    <button onClick={() => handleCancelClick(b)} disabled={isProcessing} style={{ padding: '0.45rem 0.9rem', background: 'transparent', color: 'var(--red)', border: '1px solid var(--red)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
+                  </div>
                 </div>
               </div>
             )
@@ -235,29 +244,29 @@ export default function Dashboard() {
           const { bookings: series, groupId } = group
           const pendingInSeries = series.filter(b => b.status === 'pending_token').length
           return (
-            <div key={groupId} style={{ border: '1px solid #444', borderRadius: '10px', marginBottom: '1.25rem', overflow: 'hidden' }}>
-              <div style={{ background: '#2a1a1a', borderBottom: '1px solid #333', padding: '0.6rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div key={groupId} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: '1.25rem', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ background: 'linear-gradient(90deg,#1f0a0a,var(--bg2))', borderBottom: '1px solid var(--border)', padding: '0.7rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ color: '#cc0000', fontSize: '0.8rem' }}>🔁</span>
-                  <span style={{ color: '#cc0000', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>Weekly Recurring — {formatHour(series[0].slots.start_hour)}</span>
+                  <span style={{ fontSize: '0.85rem' }}>🔁</span>
+                  <span style={{ color: 'var(--red)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>Weekly · {formatHour(series[0].slots.start_hour)}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  {pendingInSeries > 0 && <span style={{ background: '#665500', color: '#ffdd44', fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 'bold' }}>{pendingInSeries} pending</span>}
-                  <span style={{ color: '#666', fontSize: '0.8rem' }}>{series.length} lessons</span>
+                  {pendingInSeries > 0 && <span className="badge badge-pending">{pendingInSeries} pending</span>}
+                  <span style={{ color: 'var(--text3)', fontSize: '0.8rem' }}>{series.length} lessons</span>
                 </div>
               </div>
               {series.map((b, i) => {
                 const within24 = isWithin24Hours(b.slots.slot_date, b.slots.start_hour)
                 const isPending = b.status === 'pending_token'
                 return (
-                  <div key={b.id} style={{ background: isPending ? '#1a1800' : (i % 2 === 0 ? '#222' : '#1e1e1e'), padding: '0.75rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: i < series.length - 1 ? '1px solid #2a2a2a' : 'none' }}>
+                  <div key={b.id} style={{ background: isPending ? 'linear-gradient(90deg,#1a1600,var(--bg2))' : (i % 2 === 0 ? 'var(--bg2)' : 'var(--bg)'), padding: '0.7rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: i < series.length - 1 ? '1px solid var(--border)' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>{b.slots.slot_date}</span>
-                      <span style={{ color: '#666', fontSize: '0.85rem' }}>at {formatHour(b.slots.start_hour)}</span>
-                      {isPending && <span style={{ background: '#665500', color: '#ffdd44', fontSize: '0.65rem', padding: '0.1rem 0.4rem', borderRadius: '3px', fontWeight: 'bold', textTransform: 'uppercase' }}>Awaiting Token</span>}
-                      {!isPending && within24 && <span style={{ color: '#aa6600', fontSize: '0.75rem' }}>⚠️ no refund</span>}
+                      <span style={{ color: 'var(--text)', fontWeight: 600, fontSize: '0.92rem' }}>{b.slots.slot_date}</span>
+                      <span style={{ color: 'var(--text3)', fontSize: '0.82rem' }}>{formatHour(b.slots.start_hour)}</span>
+                      {isPending && <span className="badge badge-pending">Awaiting Token</span>}
+                      {!isPending && within24 && <span style={{ color: '#f97316', fontSize: '0.72rem' }}>⚠️ no refund</span>}
                     </div>
-                    <button onClick={() => handleCancelClick(b)} disabled={isProcessing} style={{ padding: '0.3rem 0.75rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
+                    <button onClick={() => handleCancelClick(b)} disabled={isProcessing} style={{ padding: '0.3rem 0.7rem', background: 'transparent', color: 'var(--red)', border: '1px solid var(--red)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '0.78rem' }}>Cancel</button>
                   </div>
                 )
               })}
@@ -266,7 +275,7 @@ export default function Dashboard() {
         })
       )}
 
-      <a href="/book" style={{ display: 'inline-block', marginTop: '1.5rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
+      <a href="/book" style={{ display: 'block', marginTop: '1.5rem', padding: '0.9rem', background: 'var(--red)', color: '#fff', textDecoration: 'none', borderRadius: 'var(--radius-sm)', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.95rem', textAlign: 'center', boxShadow: '0 2px 12px var(--red-glow)' }}>
         + Book a Lesson
       </a>
     </main>

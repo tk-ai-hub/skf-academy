@@ -17,42 +17,41 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/SKF_APP.png" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </head>
-      <body style={{
-        margin: 0,
-        padding: 0,
-        background: '#1a1a1a',
-        color: '#fff',
-        fontFamily: "'Georgia', serif",
-        minHeight: '100vh'
-      }}>
+      <body>
         <header style={{
-          background: '#111',
-          borderBottom: '3px solid #cc0000',
-          padding: '1rem 2rem',
+          background: 'linear-gradient(180deg, #0a0a0c 0%, #111113 100%)',
+          borderBottom: '2px solid #cc0000',
+          padding: '0.85rem 1.5rem',
           display: 'flex',
           alignItems: 'center',
-          gap: '1rem'
+          gap: '0.9rem',
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          boxShadow: '0 2px 20px rgba(0,0,0,0.6)',
         }}>
-          <img src="/logo.png" alt="SKF Academy" style={{ height: '60px', width: '60px', borderRadius: '50%' }} />
-          <div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#fff', letterSpacing: '3px', textTransform: 'uppercase' }}>
+          <img src="/logo.png" alt="SKF Academy" style={{ height: '46px', width: '46px', borderRadius: '50%', border: '1.5px solid #cc0000', flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#fff', letterSpacing: '3px', textTransform: 'uppercase', fontFamily: 'Georgia, serif', lineHeight: 1.1 }}>
               SKF Academy
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#cc0000', letterSpacing: '3px', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: '0.65rem', color: '#cc0000', letterSpacing: '2.5px', textTransform: 'uppercase', marginTop: '0.1rem' }}>
               Shaolin Kung Fu — Est. 1986
             </div>
           </div>
         </header>
-        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>
+
+        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '1.75rem 1.25rem 4rem' }}>
           {children}
         </div>
+
         <footer style={{
-          borderTop: '1px solid #333',
+          borderTop: '1px solid #2e2e32',
           padding: '1.5rem',
           textAlign: 'center',
-          color: '#666',
-          fontSize: '0.85rem',
-          marginTop: '4rem'
+          color: '#3a3a42',
+          fontSize: '0.8rem',
+          letterSpacing: '0.5px',
         }}>
           © {new Date().getFullYear()} SKF Academy · kungfubc.com
         </footer>
