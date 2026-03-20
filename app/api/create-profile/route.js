@@ -16,7 +16,7 @@ export async function POST(request) {
     .eq('slug', 'skf-academy')
     .single()
 
-  const { error } = await supabaseAdmin.from('users').insert({
+  const { error } = await supabaseAdmin.from('users').upsert({
     id: userId,
     tenant_id: tenant?.id,
     email,
@@ -26,7 +26,7 @@ export async function POST(request) {
     phone: phone || '',
     date_of_birth: dob || null,
     role: 'student'
-  })
+  }, { onConflict: 'id' })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
