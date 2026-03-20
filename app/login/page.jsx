@@ -59,21 +59,10 @@ export default function Login() {
       }
 
       if (data.user) {
-        const { data: tenantData } = await supabase
-          .from('tenants')
-          .select('id')
-          .eq('slug', 'skf-academy')
-          .single()
-
-        await supabase.from('users').insert({
-          id: data.user.id,
-          tenant_id: tenantData.id,
-          email,
-          first_name: firstName,
-          last_name: lastName,
-          phone,
-          date_of_birth: dob || null,
-          role: 'student'
+        await fetch('/api/create-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: data.user.id, email, firstName, lastName, phone, dob: dob || null })
         })
       }
 
