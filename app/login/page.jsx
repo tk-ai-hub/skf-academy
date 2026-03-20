@@ -64,32 +64,28 @@ export default function Login() {
   async function handleSignUp() {
     if (!firstName || !email || !password) { setMessage('First name, email and password are required.'); return }
     setLoading(true); setMessage('')
-    const { data, error } = await supabase.auth.signUp({ email, password })
-    if (error) { setMessage(error.message); setLoading(false); return }
-    if (data.user) {
-      await fetch('/api/create-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: data.user.id, email, firstName, lastName, phone, dob: dob || null })
-      })
-    }
+    const res = await fetch('/api/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, firstName, lastName, phone, dob: dob || null })
+    })
+    const data = await res.json()
     setLoading(false)
+    if (!res.ok) { setMessage(data.error || 'Signup failed. Please try again.'); return }
     window.location.href = '/confirm'
   }
 
   async function handleTrial() {
     if (!firstName || !email || !password) { setMessage('First name, email and password are required.'); return }
     setLoading(true); setMessage('')
-    const { data, error } = await supabase.auth.signUp({ email, password })
-    if (error) { setMessage(error.message); setLoading(false); return }
-    if (data.user) {
-      await fetch('/api/create-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: data.user.id, email, firstName, lastName, phone, dob: dob || null, trialToken: true })
-      })
-    }
+    const res = await fetch('/api/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, firstName, lastName, phone, dob: dob || null, trialToken: true })
+    })
+    const data = await res.json()
     setLoading(false)
+    if (!res.ok) { setMessage(data.error || 'Signup failed. Please try again.'); return }
     window.location.href = '/confirm'
   }
 
