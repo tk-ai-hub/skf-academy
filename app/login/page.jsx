@@ -11,6 +11,7 @@ export default function Login() {
   const [phone, setPhone] = useState('')
   const [dob, setDob] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
+  const [isForgot, setIsForgot] = useState(false)
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [installPrompt, setInstallPrompt] = useState(null)
@@ -75,6 +76,18 @@ export default function Login() {
     setLoading(false)
   }
 
+  async function handleForgotPassword() {
+    if (!email) { setMessage('Please enter your email address.'); return }
+    setLoading(true)
+    setMessage('')
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?type=recovery`
+    })
+    setLoading(false)
+    if (error) { setMessage(error.message); return }
+    setMessage('✅ Check your email for a password reset link.')
+  }
+
   const inputStyle = {
     width: '100%',
     padding: '0.75rem',
@@ -134,15 +147,29 @@ export default function Login() {
       )}
 
       <h2 style={{ color: '#fff', textAlign: 'center', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-        {isSignUp ? 'Create Account' : 'Sign In'}
+        {isForgot ? 'Reset Password' : isSignUp ? 'Create Account' : 'Sign In'}
       </h2>
       <p style={{ color: '#666', textAlign: 'center', marginBottom: '2rem', fontSize: '0.9rem' }}>
-        {isSignUp ? 'Join SKF Academy' : 'Welcome back'}
+        {isForgot ? 'Enter your email to receive a reset link' : isSignUp ? 'Join SKF Academy' : 'Welcome back'}
       </p>
 
       <div style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '2rem' }}>
 
-        {isSignUp && (
+        {isForgot && (
+          <>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
+            </div>
+            <button onClick={handleForgotPassword} disabled={loading} style={{ width: '100%', padding: '0.85rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
+              {loading ? 'Sending...' : 'Send Reset Link'}
+            </button>
+            {message && <p style={{ marginTop: '1rem', color: message.startsWith('✅') ? '#66cc66' : '#ff6666', textAlign: 'center', fontSize: '0.9rem' }}>{message}</p>}
+            <p onClick={() => { setIsForgot(false); setMessage('') }} style={{ marginTop: '1.5rem', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '0.9rem' }}>← Back to Sign In</p>
+          </>
+        )}
+
+        {!isForgot && isSignUp && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
               <div>
@@ -167,36 +194,46 @@ export default function Login() {
           </>
         )}
 
-        <div style={fieldStyle}>
-          <label style={labelStyle}>Email</label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
-        </div>
+        {!isForgot && (
+          <>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
+            </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={labelStyle}>Password</label>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} />
-        </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={labelStyle}>Password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} />
+            </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          style={{ width: '100%', padding: '0.85rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}
-        >
-          {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
-        </button>
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              style={{ width: '100%', padding: '0.85rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}
+            >
+              {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
+            </button>
 
-        {message && (
-          <p style={{ marginTop: '1rem', color: '#ff6666', textAlign: 'center', fontSize: '0.9rem' }}>
-            {message}
-          </p>
+            {message && (
+              <p style={{ marginTop: '1rem', color: '#ff6666', textAlign: 'center', fontSize: '0.9rem' }}>
+                {message}
+              </p>
+            )}
+
+            {!isSignUp && (
+              <p onClick={() => { setIsForgot(true); setMessage('') }} style={{ marginTop: '1rem', textAlign: 'center', color: '#666', cursor: 'pointer', fontSize: '0.85rem' }}>
+                Forgot password?
+              </p>
+            )}
+
+            <p
+              onClick={() => setIsSignUp(!isSignUp)}
+              style={{ marginTop: '1rem', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '0.9rem' }}
+            >
+              {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+            </p>
+          </>
         )}
-
-        <p
-          onClick={() => setIsSignUp(!isSignUp)}
-          style={{ marginTop: '1.5rem', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '0.9rem' }}
-        >
-          {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-        </p>
       </div>
     </main>
   )
