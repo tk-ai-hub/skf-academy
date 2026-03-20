@@ -145,7 +145,7 @@ export default function Admin() {
   }
 
   async function updateBeltRank(studentId, newRank) {
-    await supabase.from('users').update({ belt_rank: newRank }).eq('id', studentId)
+    await fetch('/api/admin/update-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId, beltRank: newRank }) })
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, belt_rank: newRank } : s))
     setSelectedStudent(prev => prev ? { ...prev, belt_rank: newRank } : prev)
     setEditingRank(false)
@@ -153,8 +153,9 @@ export default function Admin() {
   }
 
   async function updateProfile() {
+    const res = await fetch('/api/admin/update-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId: selectedStudent.id, firstName: editFirstName, lastName: editLastName, phone: editPhone, dob: editDob }) })
+    if (!res.ok) { setMessage('Failed to save.'); return }
     const updates = { first_name: editFirstName, last_name: editLastName, full_name: [editFirstName, editLastName].filter(Boolean).join(' '), phone: editPhone, date_of_birth: editDob || null }
-    await supabase.from('users').update(updates).eq('id', selectedStudent.id)
     setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, ...updates } : s))
     setSelectedStudent(prev => ({ ...prev, ...updates }))
     setEditingProfile(false)
