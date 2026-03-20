@@ -77,6 +77,11 @@ export default function Admin() {
   const [studentBookings, setStudentBookings] = useState([])
   const [profileLoading, setProfileLoading] = useState(false)
   const [editingRank, setEditingRank] = useState(false)
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [editFirstName, setEditFirstName] = useState('')
+  const [editLastName, setEditLastName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [editDob, setEditDob] = useState('')
 
   // Email
   const [selectedStudentIds, setSelectedStudentIds] = useState([])
@@ -145,6 +150,15 @@ export default function Admin() {
     setSelectedStudent(prev => prev ? { ...prev, belt_rank: newRank } : prev)
     setEditingRank(false)
     setMessage(`Belt rank updated to ${newRank}.`)
+  }
+
+  async function updateProfile() {
+    const updates = { first_name: editFirstName, last_name: editLastName, full_name: [editFirstName, editLastName].filter(Boolean).join(' '), phone: editPhone, date_of_birth: editDob || null }
+    await supabase.from('users').update(updates).eq('id', selectedStudent.id)
+    setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, ...updates } : s))
+    setSelectedStudent(prev => ({ ...prev, ...updates }))
+    setEditingProfile(false)
+    setMessage('Profile updated.')
   }
 
   async function markAttendance(bookingId, attendance) {
@@ -495,17 +509,47 @@ export default function Admin() {
 
                   {/* Info */}
                   <div style={{ marginBottom: '1rem' }}>
-                    {[
-                      { label: 'Email', value: selectedStudent.email },
-                      { label: 'Phone', value: selectedStudent.phone || '—' },
-                      { label: 'Date of Birth', value: selectedStudent.date_of_birth || '—' },
-                      { label: 'Tokens', value: studentTokens, highlight: true },
-                    ].map(({ label, value, highlight }) => (
-                      <div key={label} style={{ marginBottom: '0.6rem' }}>
-                        <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</div>
-                        <div style={{ color: highlight ? '#cc0000' : '#fff', fontSize: highlight ? '1.3rem' : '0.9rem', fontWeight: highlight ? 'bold' : 'normal' }}>{value}</div>
+                    {editingProfile ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>First Name</div>
+                            <input value={editFirstName} onChange={e => setEditFirstName(e.target.value)} style={{ width: '100%', padding: '0.4rem', background: '#2a2a2a', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Last Name</div>
+                            <input value={editLastName} onChange={e => setEditLastName(e.target.value)} style={{ width: '100%', padding: '0.4rem', background: '#2a2a2a', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Phone</div>
+                          <input value={editPhone} onChange={e => setEditPhone(e.target.value)} style={{ width: '100%', padding: '0.4rem', background: '#2a2a2a', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Date of Birth</div>
+                          <input type="date" value={editDob} onChange={e => setEditDob(e.target.value)} style={{ width: '100%', padding: '0.4rem', background: '#2a2a2a', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box', colorScheme: 'dark' }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                          <button onClick={updateProfile} style={{ flex: 1, padding: '0.4rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>Save</button>
+                          <button onClick={() => setEditingProfile(false)} style={{ flex: 1, padding: '0.4rem', background: 'transparent', color: '#888', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
+                        </div>
                       </div>
-                    ))}
+                    ) : (
+                      <>
+                        {[
+                          { label: 'Email', value: selectedStudent.email },
+                          { label: 'Phone', value: selectedStudent.phone || '—' },
+                          { label: 'Date of Birth', value: selectedStudent.date_of_birth || '—' },
+                          { label: 'Tokens', value: studentTokens, highlight: true },
+                        ].map(({ label, value, highlight }) => (
+                          <div key={label} style={{ marginBottom: '0.6rem' }}>
+                            <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</div>
+                            <div style={{ color: highlight ? '#cc0000' : '#fff', fontSize: highlight ? '1.3rem' : '0.9rem', fontWeight: highlight ? 'bold' : 'normal' }}>{value}</div>
+                          </div>
+                        ))}
+                        <button onClick={() => { setEditingProfile(true); setEditFirstName(selectedStudent.first_name || ''); setEditLastName(selectedStudent.last_name || ''); setEditPhone(selectedStudent.phone || ''); setEditDob(selectedStudent.date_of_birth || '') }} style={{ padding: '0.3rem 0.75rem', background: '#2a2a2a', color: '#aaa', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', marginTop: '0.25rem' }}>Edit Info</button>
+                      </>
+                    )}
                   </div>
 
                   {/* Token buttons */}
