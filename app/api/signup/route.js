@@ -65,11 +65,13 @@ export async function POST(request) {
   const userId = authData.user.id
 
   // Get tenant
-  const { data: tenant } = await supabaseAdmin
+  const { data: tenant, error: tenantError } = await supabaseAdmin
     .from('tenants')
     .select('id')
     .eq('slug', 'skf-academy')
     .single()
+
+  if (tenantError) console.error('Tenant lookup error:', tenantError)
 
   // Upsert profile
   const { error: profileError } = await supabaseAdmin.from('users').upsert({
