@@ -65,7 +65,7 @@ export default function AdminBook() {
 
   // Slot selection
   const [slots, setSlots] = useState([])
-  const [bookedSlotIds, setBookedSlotIds] = useState([])
+  const [slotBookingCounts, setSlotBookingCounts] = useState({})
   const [availableDates, setAvailableDates] = useState([])
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedSlot, setSelectedSlot] = useState(null)
@@ -95,25 +95,35 @@ export default function AdminBook() {
       const { data: bookedData } = await supabase
         .from('bookings')
         .select('slot_id')
-        .eq('status', 'confirmed')
-      setBookedSlotIds((bookedData || []).map(b => b.slot_id))
+        .in('status', ['confirmed', 'pending_token'])
+
+      // Count bookings per slot
+      const counts = {}
+      ;(bookedData || []).forEach(b => { counts[b.slot_id] = (counts[b.slot_id] || 0) + 1 })
+      setSlotBookingCounts(counts)
+
+      // Slots full (2 bookings) are excluded
+      const fullSlotIds = Object.entries(counts).filter(([, c]) => c >= 2).map(([id]) => id)
 
       const today = new Date().toISOString().split('T')[0]
       const ninetyOut = new Date()
       ninetyOut.setDate(ninetyOut.getDate() + 90)
       const maxDate = ninetyOut.toISOString().split('T')[0]
 
-      const alreadyBooked = (bookedData || []).map(b => b.slot_id)
-      const { data: slotData } = await supabase
+      let slotQuery = supabase
         .from('slots')
         .select('*')
         .eq('is_blocked', false)
         .gte('slot_date', today)
         .lte('slot_date', maxDate)
-        .not('id', 'in', `(${alreadyBooked.length > 0 ? alreadyBooked.join(',') : '00000000-0000-0000-0000-000000000000'})`)
         .order('slot_date', { ascending: true })
         .order('start_hour', { ascending: true })
 
+      if (fullSlotIds.length > 0) {
+        slotQuery = slotQuery.not('id', 'in', `(${fullSlotIds.join(',')})`)
+      }
+
+      const { data: slotData } = await slotQuery
       setSlots(slotData || [])
       const dates = [...new Set((slotData || []).map(s => s.slot_date))]
       setAvailableDates(dates)
@@ -436,6 +446,7 @@ export default function AdminBook() {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                       {slotsForDate.map(slot => {
                         const active = selectedSlot?.id === slot.id
+                        const count = slotBookingCounts[slot.id] || 0
                         return (
                           <button
                             key={slot.id}
@@ -443,16 +454,22 @@ export default function AdminBook() {
                             style={{
                               padding: '0.75rem 0.5rem',
                               borderRadius: '6px',
-                              border: `2px solid ${active ? '#cc0000' : '#444'}`,
-                              background: active ? '#cc0000' : '#1a1a1a',
+                              border: `2px solid ${active ? '#cc0000' : count > 0 ? '#7a4400' : '#444'}`,
+                              background: active ? '#cc0000' : count > 0 ? '#1a0f00' : '#1a1a1a',
                               color: active ? '#fff' : '#ccc',
                               cursor: 'pointer',
                               fontSize: '0.9rem',
                               fontWeight: active ? 'bold' : 'normal',
-                              transition: 'all 0.15s'
+                              transition: 'all 0.15s',
+                              position: 'relative'
                             }}
                           >
                             {formatHour(slot.start_hour)}
+                            {count > 0 && (
+                              <span style={{ display: 'block', fontSize: '0.65rem', color: active ? '#ffcca0' : '#e87722', marginTop: '0.15rem' }}>
+                                {count}/2 booked
+                              </span>
+                            )}
                           </button>
                         )
                       })}

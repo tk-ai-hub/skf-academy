@@ -45,14 +45,13 @@ export async function POST(request) {
     .single()
   if (slotError || !slot) return Response.json({ error: 'Slot not found' }, { status: 404 })
 
-  // Check slot not already booked
+  // Check slot has capacity (max 2 bookings per slot)
   const { data: existing } = await supabaseAdmin
     .from('bookings')
     .select('id')
     .eq('slot_id', slotId)
-    .eq('status', 'confirmed')
-    .maybeSingle()
-  if (existing) return Response.json({ error: 'This slot is already booked' }, { status: 409 })
+    .in('status', ['confirmed', 'pending_token'])
+  if ((existing || []).length >= 2) return Response.json({ error: 'This slot is fully booked (2/2)' }, { status: 409 })
 
   let userId = studentId
   let studentName = ''
