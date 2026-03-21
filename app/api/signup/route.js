@@ -38,7 +38,7 @@ export async function POST(request) {
     const confirmUrl = linkData.properties.action_link
     const name = [firstName, lastName].filter(Boolean).join(' ') || email
     await resend.emails.send({
-      from: 'SKF Academy <mail@kungfubc.com>',
+      from: 'SKF Academy <noreply@kungfubc.com>',
       to: email,
       subject: 'Confirm your SKF Academy account',
       html: `
