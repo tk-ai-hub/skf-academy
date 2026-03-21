@@ -90,6 +90,7 @@ export default function AdminBook() {
       const studentsRes = await fetch('/api/admin/students')
       const studentData = studentsRes.ok ? await studentsRes.json() : []
       setAllStudents(studentData || [])
+      setSearchResults(studentData || [])
 
       const { data: bookedData } = await supabase
         .from('bookings')
@@ -124,13 +125,13 @@ export default function AdminBook() {
   // Live search filter
   useEffect(() => {
     const q = searchQuery.toLowerCase().trim()
-    if (!q) { setSearchResults([]); return }
+    if (!q) { setSearchResults(allStudents); return }
     const filtered = allStudents.filter(s => {
       const name = sName(s).toLowerCase()
       const phone = (s.phone || '').replace(/\D/g, '')
       return name.includes(q) || phone.includes(q.replace(/\D/g, ''))
     })
-    setSearchResults(filtered.slice(0, 8))
+    setSearchResults(filtered)
   }, [searchQuery, allStudents])
 
   const slotsForDate = slots.filter(s => s.slot_date === selectedDate)
@@ -298,8 +299,8 @@ export default function AdminBook() {
                     style={inputStyle}
                     autoComplete="off"
                   />
-                  {searchResults.length > 0 && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1a1a', border: '1px solid #444', borderRadius: '0 0 6px 6px', zIndex: 10, maxHeight: '260px', overflowY: 'auto' }}>
+                  {!selectedStudent && searchResults.length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1a1a', border: '1px solid #444', borderRadius: '0 0 6px 6px', zIndex: 10, maxHeight: '300px', overflowY: 'auto' }}>
                       {searchResults.map(s => (
                         <div
                           key={s.id}
