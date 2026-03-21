@@ -73,7 +73,7 @@ export async function POST(request) {
 
   if (tenantError) console.error('Tenant lookup error:', tenantError)
 
-  // Upsert profile
+  // Upsert full profile
   const { error: profileError } = await supabaseAdmin.from('users').upsert({
     id: userId,
     tenant_id: tenant?.id,
@@ -88,7 +88,17 @@ export async function POST(request) {
 
   if (profileError) {
     console.error('Profile upsert error:', profileError)
-    // Don't fail — auth user was created, profile can be fixed later
+    // Retry with minimal data so user always appears in student list
+    const { error: fallbackError } = await supabaseAdmin.from('users').upsert({
+      id: userId,
+      tenant_id: tenant?.id || null,
+      email,
+      first_name: firstName || '',
+      last_name: lastName || '',
+      full_name: [firstName, lastName].filter(Boolean).join(' '),
+      role: 'student'
+    }, { onConflict: 'id' })
+    if (fallbackError) console.error('Profile fallback error:', fallbackError)
   }
 
   // Add trial token if requested
