@@ -1,4 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request) {
   const supabaseAdmin = createClient(
@@ -16,12 +19,47 @@ export async function POST(request) {
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
-    email_confirm: false, // sends confirmation email
+    email_confirm: false,
   })
 
   if (authError) {
     console.error('Auth signup error:', authError)
     return Response.json({ error: authError.message }, { status: 400 })
+  }
+
+  // Generate email confirmation link and send via Resend
+  const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'signup',
+    email,
+    password,
+  })
+
+  if (!linkError && linkData?.properties?.action_link) {
+    const confirmUrl = linkData.properties.action_link
+    const name = [firstName, lastName].filter(Boolean).join(' ') || email
+    await resend.emails.send({
+      from: 'SKF Academy <mail@kungfubc.com>',
+      to: email,
+      subject: 'Confirm your SKF Academy account',
+      html: `
+        <div style="font-family: Georgia, serif; max-width: 500px; margin: 0 auto; background: #1a1a1a; color: #fff; padding: 2rem; border-radius: 8px;">
+          <div style="text-align: center; margin-bottom: 2rem;">
+            <h1 style="color: #cc0000; letter-spacing: 3px; text-transform: uppercase; font-size: 1.5rem;">SKF Academy</h1>
+            <p style="color: #666; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase;">Shaolin Kung Fu — Est. 1986</p>
+          </div>
+          <h2 style="color: #fff;">Welcome, ${name}!</h2>
+          <p style="color: #ccc;">Thanks for creating your account. Click the button below to confirm your email address and get started.</p>
+          <div style="text-align: center; margin: 2rem 0;">
+            <a href="${confirmUrl}" style="display: inline-block; background: #cc0000; color: #fff; text-decoration: none; padding: 0.9rem 2rem; border-radius: 4px; font-size: 1rem; letter-spacing: 1px; text-transform: uppercase;">Confirm Email</a>
+          </div>
+          <p style="color: #666; font-size: 0.85rem;">If you didn't create this account, you can safely ignore this email.</p>
+          <hr style="border-color: #333; margin: 2rem 0;" />
+          <p style="color: #444; font-size: 0.8rem; text-align: center;">SKF Academy · app.kungfubc.com</p>
+        </div>
+      `
+    })
+  } else if (linkError) {
+    console.error('Generate link error:', linkError)
   }
 
   const userId = authData.user.id
