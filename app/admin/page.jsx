@@ -8,6 +8,19 @@ function formatHour(h) {
   return `${h - 12}:00 PM`
 }
 
+// Recurring group classes — always blocked for private booking
+const RECURRING_CLASSES = [
+  { dayOfWeek: 2, hour: 18, label: 'Kids Class' },
+  { dayOfWeek: 4, hour: 18, label: 'Kids Class' },
+  { dayOfWeek: 2, hour: 21, label: 'Skill Development Class' },
+  { dayOfWeek: 4, hour: 21, label: 'Skill Development Class' },
+]
+
+function getClassForCell(date, hour) {
+  const dow = new Date(date + 'T00:00:00').getDay()
+  return RECURRING_CLASSES.find(c => c.dayOfWeek === dow && c.hour === hour) || null
+}
+
 const BELT_RANKS = ['white', 'yellow', 'orange', 'green', 'blue', 'brown', 'black']
 const BELT_COLORS = { white: '#eee', yellow: '#f5c518', orange: '#e87722', green: '#2d8a4e', blue: '#1a5fa8', brown: '#7b4f2e', black: '#222' }
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 10)
@@ -355,15 +368,20 @@ export default function Admin() {
                     <td style={{ color: '#555', fontSize: '0.75rem', padding: '0.4rem 0.5rem', borderBottom: '1px solid #1f1f1f', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{formatHour(hour)}</td>
                     {weekDates.map(date => {
                       const booking = getBookingForCell(date, hour)
+                      const groupClass = getClassForCell(date, hour)
                       const isToday = date === today.toISOString().split('T')[0]
                       const badge = booking ? attendanceBadge(booking.attendance) : null
                       return (
                         <td key={date} style={{ padding: '0.3rem', borderBottom: '1px solid #1f1f1f', background: isToday ? '#0d0000' : 'transparent', verticalAlign: 'top' }}>
-                          {booking ? (
+                          {groupClass ? (
+                            <div style={{ background: '#0a1a2a', border: '1px solid #1a5fa8', borderRadius: '5px', padding: '0.3rem 0.4rem' }}>
+                              <div style={{ color: '#7ab8f5', fontSize: '0.72rem', fontWeight: 'bold', lineHeight: 1.2 }}>{groupClass.label}</div>
+                              <div style={{ color: '#1a5fa8', fontSize: '0.6rem', textTransform: 'uppercase', marginTop: '2px' }}>Group Class</div>
+                            </div>
+                          ) : booking ? (
                             <div style={{ background: '#2a0000', border: '1px solid #cc0000', borderRadius: '5px', padding: '0.3rem 0.4rem' }}>
                               <div style={{ color: '#fff', fontSize: '0.78rem', fontWeight: 'bold' }}>{sName(booking.users)}</div>
                               <div style={{ color: '#cc0000', fontSize: '0.65rem', textTransform: 'uppercase' }}>Private Lesson</div>
-                              {/* Attendance buttons */}
                               <div style={{ display: 'flex', gap: '2px', marginTop: '4px' }}>
                                 <button onClick={() => markAttendance(booking.id, 'attended')} style={{ flex: 1, padding: '2px 3px', fontSize: '0.6rem', background: booking.attendance === 'attended' ? '#2a6a2a' : '#1a1a1a', color: booking.attendance === 'attended' ? '#66cc66' : '#555', border: '1px solid #333', borderRadius: '3px', cursor: 'pointer' }}>✓</button>
                                 <button onClick={() => markAttendance(booking.id, 'dns')} style={{ flex: 1, padding: '2px 3px', fontSize: '0.6rem', background: booking.attendance === 'dns' ? '#6a2a2a' : '#1a1a1a', color: booking.attendance === 'dns' ? '#cc6666' : '#555', border: '1px solid #333', borderRadius: '3px', cursor: 'pointer' }}>DNS</button>

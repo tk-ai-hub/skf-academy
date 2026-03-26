@@ -18,6 +18,19 @@ function formatDateShort(d) {
   return date.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
+// Recurring group classes — not bookable by students
+const RECURRING_CLASSES = [
+  { dayOfWeek: 2, hour: 18 }, // Tuesday 6PM Kids Class
+  { dayOfWeek: 4, hour: 18 }, // Thursday 6PM Kids Class
+  { dayOfWeek: 2, hour: 21 }, // Tuesday 9PM Skill Development
+  { dayOfWeek: 4, hour: 21 }, // Thursday 9PM Skill Development
+]
+
+function isGroupClass(slotDate, startHour) {
+  const dow = new Date(slotDate + 'T00:00:00').getDay()
+  return RECURRING_CLASSES.some(c => c.dayOfWeek === dow && c.hour === startHour)
+}
+
 function isBirthday(dateStr, dob) {
   if (!dob) return false
   const [, month, day] = dateStr.split('-').map(Number)
@@ -96,8 +109,9 @@ export default function Book() {
         .not('id', 'in', `(${alreadyBooked.length > 0 ? alreadyBooked.join(',') : '00000000-0000-0000-0000-000000000000'})`)
         .order('slot_date', { ascending: true })
         .order('start_hour', { ascending: true })
-      setSlots(data || [])
-      const dates = [...new Set((data || []).map(s => s.slot_date))]
+      const filtered = (data || []).filter(s => !isGroupClass(s.slot_date, s.start_hour))
+      setSlots(filtered)
+      const dates = [...new Set(filtered.map(s => s.slot_date))]
       setAvailableDates(dates)
       if (dates.length > 0) setSelectedDate(dates[0])
     }
