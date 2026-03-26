@@ -14,6 +14,34 @@ function isWithin24Hours(slotDate, slotHour) {
   return (slotTime - now) < 24 * 60 * 60 * 1000
 }
 
+const RECURRING_CLASSES = [
+  { dayOfWeek: 2, hour: 18, label: 'Kids Class', color: '#1a8a4e', border: '#2a6a3e', text: '#66cc99' },
+  { dayOfWeek: 4, hour: 18, label: 'Kids Class', color: '#1a8a4e', border: '#2a6a3e', text: '#66cc99' },
+  { dayOfWeek: 2, hour: 21, label: 'Skill Development Class', color: '#1a3a7a', border: '#2a5aaa', text: '#7ab8f5' },
+  { dayOfWeek: 4, hour: 21, label: 'Skill Development Class', color: '#1a3a7a', border: '#2a5aaa', text: '#7ab8f5' },
+]
+
+function getUpcomingGroupClasses(weeksAhead = 8) {
+  const classes = []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  for (let i = 0; i < weeksAhead * 7; i++) {
+    const d = new Date(today)
+    d.setDate(today.getDate() + i)
+    const dow = d.getDay()
+    const dateStr = d.toISOString().split('T')[0]
+    RECURRING_CLASSES.forEach(c => {
+      if (c.dayOfWeek === dow) {
+        const classTime = new Date(`${dateStr}T${String(c.hour).padStart(2, '0')}:00:00`)
+        if (classTime > new Date()) {
+          classes.push({ type: 'class', date: dateStr, hour: c.hour, label: c.label, color: c.color, border: c.border, text: c.text })
+        }
+      }
+    })
+  }
+  return classes
+}
+
 export default function Dashboard() {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -135,6 +163,17 @@ export default function Dashboard() {
   const grouped = groupBookings(bookings)
   const displayName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : user?.email
 
+  // Merge private bookings + group class reminders, sorted by date/time
+  const upcomingClasses = getUpcomingGroupClasses(8)
+  const allItems = [
+    ...grouped.map(g => {
+      const date = g.type === 'single' ? g.booking.slots.slot_date : g.bookings[0].slots.slot_date
+      const hour = g.type === 'single' ? g.booking.slots.start_hour : g.bookings[0].slots.start_hour
+      return { ...g, sortKey: `${date}T${String(hour).padStart(2, '0')}` }
+    }),
+    ...upcomingClasses.map(c => ({ ...c, sortKey: `${c.date}T${String(c.hour).padStart(2, '0')}` }))
+  ].sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+
   return (
     <main>
       {user && (
@@ -209,10 +248,45 @@ export default function Dashboard() {
 
       <h2 style={{ color: 'var(--text)', borderBottom: '1px solid var(--border)', paddingBottom: '0.6rem', marginBottom: '1.25rem', fontSize: '1.1rem', letterSpacing: '0.5px', textTransform: 'uppercase', fontFamily: 'Georgia, serif' }}>Upcoming Lessons</h2>
 
-      {grouped.length === 0 ? (
+      {allItems.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
       ) : (
-        grouped.map((group) => {
+        allItems.map((group, idx) => {
+          if (group.type === 'class') {
+            const isToday = group.date === new Date().toISOString().split('T')[0]
+            const isTomorrow = group.date === new Date(Date.now() + 86400000).toISOString().split('T')[0]
+            return (
+              <div key={`class-${group.date}-${group.hour}`} style={{
+                background: `linear-gradient(135deg, ${group.color}33, #111)`,
+                border: `2px solid ${group.border}`,
+                borderRadius: '10px',
+                padding: '1rem 1.25rem',
+                marginBottom: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+              }}>
+                <div style={{ fontSize: '1.8rem', flexShrink: 0 }}>
+                  {group.label === 'Kids Class' ? '🥋' : '⚡'}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.2rem' }}>
+                    <span style={{ color: group.text, fontWeight: 800, fontSize: '1rem', letterSpacing: '0.5px' }}>{group.label}</span>
+                    {isToday && <span style={{ background: group.border, color: '#fff', fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: '10px', letterSpacing: '1px', textTransform: 'uppercase' }}>TODAY</span>}
+                    {isTomorrow && <span style={{ background: '#333', color: '#aaa', fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: '10px', letterSpacing: '1px', textTransform: 'uppercase' }}>TOMORROW</span>}
+                  </div>
+                  <div style={{ color: '#aaa', fontSize: '0.85rem' }}>
+                    {new Date(group.date + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'long', month: 'short', day: 'numeric' })}
+                    <span style={{ color: group.text, fontWeight: 600, marginLeft: '0.5rem' }}>{formatHour(group.hour)}</span>
+                  </div>
+                </div>
+                <div style={{ color: group.text, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, textAlign: 'right', flexShrink: 0 }}>
+                  Group<br />Class
+                </div>
+              </div>
+            )
+          }
+
           if (group.type === 'single') {
             const b = group.booking
             const within24 = isWithin24Hours(b.slots.slot_date, b.slots.start_hour)
@@ -272,7 +346,7 @@ export default function Dashboard() {
               })}
             </div>
           )
-        })
+        })}
       )}
 
       <a href="/book" style={{ display: 'block', marginTop: '1.5rem', padding: '0.9rem', background: 'var(--red)', color: '#fff', textDecoration: 'none', borderRadius: 'var(--radius-sm)', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.95rem', textAlign: 'center', boxShadow: '0 2px 12px var(--red-glow)' }}>
