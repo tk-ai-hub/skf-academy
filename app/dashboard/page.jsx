@@ -21,19 +21,27 @@ const RECURRING_CLASSES = [
   { dayOfWeek: 4, hour: 21, label: 'Skill Development Class', color: '#1a3a7a', border: '#2a5aaa', text: '#7ab8f5' },
 ]
 
+function localDateStr(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function getUpcomingGroupClasses(weeksAhead = 8) {
   const classes = []
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const now = new Date()
   for (let i = 0; i < weeksAhead * 7; i++) {
-    const d = new Date(today)
-    d.setDate(today.getDate() + i)
+    const d = new Date()
+    d.setDate(now.getDate() + i)
+    d.setHours(0, 0, 0, 0)
     const dow = d.getDay()
-    const dateStr = d.toISOString().split('T')[0]
+    const dateStr = localDateStr(d)
     RECURRING_CLASSES.forEach(c => {
       if (c.dayOfWeek === dow) {
-        const classTime = new Date(`${dateStr}T${String(c.hour).padStart(2, '0')}:00:00`)
-        if (classTime > new Date()) {
+        const classTime = new Date(d)
+        classTime.setHours(c.hour, 0, 0, 0)
+        if (classTime > now) {
           classes.push({ type: 'class', date: dateStr, hour: c.hour, label: c.label, color: c.color, border: c.border, text: c.text })
         }
       }
@@ -253,8 +261,9 @@ export default function Dashboard() {
       ) : (
         allItems.map((group, idx) => {
           if (group.type === 'class') {
-            const isToday = group.date === new Date().toISOString().split('T')[0]
-            const isTomorrow = group.date === new Date(Date.now() + 86400000).toISOString().split('T')[0]
+            const isToday = group.date === localDateStr(new Date())
+            const tmrw = new Date(); tmrw.setDate(tmrw.getDate() + 1)
+            const isTomorrow = group.date === localDateStr(tmrw)
             return (
               <div key={`class-${group.date}-${group.hour}`} style={{
                 background: `linear-gradient(135deg, ${group.color}33, #111)`,
