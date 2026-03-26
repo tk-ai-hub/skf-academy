@@ -111,8 +111,14 @@ export default function Admin() {
       .from('bookings')
       .select(`id, status, booked_at, tenant_id, student_id, attendance, slots!bookings_slot_id_fkey (id, slot_date, start_hour), users!bookings_student_id_fkey (full_name, first_name, last_name, email)`)
       .eq('status', 'confirmed')
-      .order('booked_at', { ascending: false })
-    setBookings((bookingData || []).filter(b => b.slots))
+    const sorted = (bookingData || [])
+      .filter(b => b.slots)
+      .sort((a, b) => {
+        const dateA = `${a.slots.slot_date}T${String(a.slots.start_hour).padStart(2, '0')}:00`
+        const dateB = `${b.slots.slot_date}T${String(b.slots.start_hour).padStart(2, '0')}:00`
+        return dateA.localeCompare(dateB)
+      })
+    setBookings(sorted)
 
     const studentsRes = await fetch('/api/admin/students')
     const studentData = studentsRes.ok ? await studentsRes.json() : []
@@ -138,9 +144,15 @@ export default function Admin() {
       .from('bookings')
       .select(`id, status, attendance, booked_at, slots!bookings_slot_id_fkey (slot_date, start_hour)`)
       .eq('student_id', student.id)
-      .order('booked_at', { ascending: false })
       .limit(20)
-    setStudentBookings((bData || []).filter(b => b.slots))
+    const sortedB = (bData || [])
+      .filter(b => b.slots)
+      .sort((a, b) => {
+        const dateA = `${a.slots.slot_date}T${String(a.slots.start_hour).padStart(2, '0')}:00`
+        const dateB = `${b.slots.slot_date}T${String(b.slots.start_hour).padStart(2, '0')}:00`
+        return dateA.localeCompare(dateB)
+      })
+    setStudentBookings(sortedB)
     setProfileLoading(false)
   }
 
