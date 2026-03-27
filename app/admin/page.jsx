@@ -299,6 +299,16 @@ export default function Admin() {
     return weekBookings.find(b => b.slots?.slot_date === date && b.slots?.start_hour === hour)
   }
 
+  function getBlockedSlotForCell(date, hour) {
+    // Check individual blocked slots
+    const slot = blockedSlots.find(s => s.slot_date === date && Number(s.start_hour) === Number(hour))
+    if (slot) return slot.block_reason || 'Blocked'
+    // Check blocked date ranges
+    const inRange = blockedRanges.find(r => date >= r.start_date && date <= r.end_date)
+    if (inRange) return inRange.reason || 'Blocked'
+    return null
+  }
+
   function formatWeekLabel() {
     const s = new Date(weekStart + 'T00:00:00')
     const e = new Date(weekEnd + 'T00:00:00')
@@ -384,14 +394,19 @@ export default function Admin() {
                     {weekDates.map(date => {
                       const booking = getBookingForCell(date, hour)
                       const groupClass = getClassForCell(date, hour)
+                      const blockedReason = !groupClass ? getBlockedSlotForCell(date, hour) : null
                       const isToday = date === todayStr
-                      const badge = booking ? attendanceBadge(booking.attendance) : null
                       return (
                         <td key={date} style={{ padding: '0.3rem', borderBottom: '1px solid #1f1f1f', background: isToday ? '#0d0000' : 'transparent', verticalAlign: 'top' }}>
                           {groupClass ? (
                             <div style={{ background: '#0a1a2a', border: '1px solid #1a5fa8', borderRadius: '5px', padding: '0.3rem 0.4rem' }}>
                               <div style={{ color: '#7ab8f5', fontSize: '0.72rem', fontWeight: 'bold', lineHeight: 1.2 }}>{groupClass.label}</div>
                               <div style={{ color: '#1a5fa8', fontSize: '0.6rem', textTransform: 'uppercase', marginTop: '2px' }}>Group Class</div>
+                            </div>
+                          ) : blockedReason ? (
+                            <div style={{ background: '#0a1f0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem' }}>
+                              <div style={{ color: '#66cc66', fontSize: '0.72rem', fontWeight: 'bold', lineHeight: 1.2 }}>🔒 Blocked</div>
+                              <div style={{ color: '#3a8a3a', fontSize: '0.6rem', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{blockedReason}</div>
                             </div>
                           ) : booking ? (
                             <div style={{ background: '#2a0000', border: '1px solid #cc0000', borderRadius: '5px', padding: '0.3rem 0.4rem' }}>
