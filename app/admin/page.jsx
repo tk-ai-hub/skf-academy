@@ -250,8 +250,13 @@ export default function Admin() {
     if (!blockStart || !blockEnd) { setMessage('Please select a start and end date.'); return }
     const { data: tenant } = await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()
     await supabase.from('blocked_ranges').insert({ tenant_id: tenant.id, start_date: blockStart, end_date: blockEnd, reason: blockReason || 'Unavailable' })
-    await supabase.from('slots').update({ is_blocked: true, block_reason: blockReason || 'Unavailable' }).gte('slot_date', blockStart).lte('slot_date', blockEnd)
-    setMessage(`Dates blocked from ${blockStart} to ${blockEnd}.`)
+    const res = await fetch('/api/admin/block-and-cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'range', startDate: blockStart, endDate: blockEnd, reason: blockReason || 'Unavailable' })
+    })
+    const { cancelled } = await res.json()
+    setMessage(`Dates blocked from ${blockStart} to ${blockEnd}.${cancelled > 0 ? ` ${cancelled} booking${cancelled > 1 ? 's' : ''} cancelled and token${cancelled > 1 ? 's' : ''} refunded.` : ''}`)
     setBlockStart(''); setBlockEnd(''); setBlockReason('')
     loadData()
   }
@@ -265,8 +270,13 @@ export default function Admin() {
 
   async function blockSingleSlot() {
     if (!blockSlotDate) { setMessage('Please select a date.'); return }
-    await supabase.from('slots').update({ is_blocked: true, block_reason: blockSlotReason || 'Unavailable' }).eq('slot_date', blockSlotDate).eq('start_hour', blockSlotHour)
-    setMessage(`${blockSlotDate} at ${formatHour(blockSlotHour)} blocked.`)
+    const res = await fetch('/api/admin/block-and-cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'slot', slotDate: blockSlotDate, slotHour: blockSlotHour, reason: blockSlotReason || 'Unavailable' })
+    })
+    const { cancelled } = await res.json()
+    setMessage(`${blockSlotDate} at ${formatHour(blockSlotHour)} blocked.${cancelled > 0 ? ` ${cancelled} booking${cancelled > 1 ? 's' : ''} cancelled and token${cancelled > 1 ? 's' : ''} refunded.` : ''}`)
     setBlockSlotDate(''); setBlockSlotReason('')
     loadData()
   }
