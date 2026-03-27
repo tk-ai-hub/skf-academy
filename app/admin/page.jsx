@@ -8,42 +8,27 @@ function formatHour(h) {
   return `${h - 12}:00 PM`
 }
 
-// Recurring group classes — always blocked for private booking
-const RECURRING_CLASSES = [
-  { dayOfWeek: 2, hour: 18, label: 'Kids Class' },
-  { dayOfWeek: 4, hour: 18, label: 'Kids Class' },
-  { dayOfWeek: 2, hour: 21, label: 'Skill Development Class' },
-  { dayOfWeek: 4, hour: 21, label: 'Skill Development Class' },
-]
-
-function getClassForCell(date, hour) {
-  const dow = new Date(date + 'T00:00:00').getDay()
-  return RECURRING_CLASSES.find(c => c.dayOfWeek === dow && c.hour === hour) || null
-}
-
 const BELT_RANKS = ['white', 'yellow', 'orange', 'green', 'blue', 'brown', 'black']
 const BELT_COLORS = { white: '#eee', yellow: '#f5c518', orange: '#e87722', green: '#2d8a4e', blue: '#1a5fa8', brown: '#7b4f2e', black: '#222' }
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 10)
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-function localDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 function getWeekDates(referenceDate) {
-  const d = new Date(referenceDate + 'T00:00:00') // parse as local time
+  const d = new Date(referenceDate)
   const day = d.getDay()
   const monday = new Date(d)
   monday.setDate(d.getDate() - ((day + 6) % 7))
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday)
     date.setDate(monday.getDate() + i)
-    return localDateStr(date)
+    return date.toISOString().split('T')[0]
   })
 }
 
 function getUpcomingBirthdays(students) {
+  if (!isAuthorized) return null
+
   const today = new Date()
   const in30 = new Date()
   in30.setDate(today.getDate() + 30)
@@ -74,6 +59,7 @@ function isWithin24Hours(slotDate, slotHour) {
 }
 
 export default function Admin() {
+  const [isAuthorized, setIsAuthorized] = useState(false)
   const [bookings, setBookings] = useState([])
   const [students, setStudents] = useState([])
   const [message, setMessage] = useState('')
@@ -94,11 +80,6 @@ export default function Admin() {
   const [studentBookings, setStudentBookings] = useState([])
   const [profileLoading, setProfileLoading] = useState(false)
   const [editingRank, setEditingRank] = useState(false)
-  const [editingProfile, setEditingProfile] = useState(false)
-  const [editFirstName, setEditFirstName] = useState('')
-  const [editLastName, setEditLastName] = useState('')
-  const [editPhone, setEditPhone] = useState('')
-  const [editDob, setEditDob] = useState('')
 
   // Email
   const [selectedStudentIds, setSelectedStudentIds] = useState([])
@@ -109,10 +90,11 @@ export default function Admin() {
 
   // Admin route protection
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data?.user) { window.location.href = '/admin-login'; return }
-      const { data: profile } = await supabase.from('users').select('role').eq('id', data.user.id).single()
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) { window.location.href = '/admin-login'; return }
+      const { data: profile } = await supabase.from('users').select('role').eq('id', session.user.id).single()
       if (profile?.role !== 'admin') { await supabase.auth.signOut(); window.location.href = '/admin-login'; return }
+      setIsAuthorized(true)
     })
   }, [])
 
@@ -128,17 +110,14 @@ export default function Admin() {
       .from('bookings')
       .select(`id, status, booked_at, tenant_id, student_id, attendance, slots!bookings_slot_id_fkey (id, slot_date, start_hour), users!bookings_student_id_fkey (full_name, first_name, last_name, email)`)
       .eq('status', 'confirmed')
-    const sorted = (bookingData || [])
-      .filter(b => b.slots)
-      .sort((a, b) => {
-        const dateA = `${a.slots.slot_date}T${String(a.slots.start_hour).padStart(2, '0')}:00`
-        const dateB = `${b.slots.slot_date}T${String(b.slots.start_hour).padStart(2, '0')}:00`
-        return dateA.localeCompare(dateB)
-      })
-    setBookings(sorted)
+      .order('booked_at', { ascending: false })
+    setBookings((bookingData || []).filter(b => b.slots))
 
-    const studentsRes = await fetch('/api/admin/students')
-    const studentData = studentsRes.ok ? await studentsRes.json() : []
+    const { data: studentData } = await supabase
+      .from('users')
+      .select('id, full_name, first_name, last_name, email, phone, belt_rank, date_of_birth')
+      .eq('role', 'student')
+      .order('first_name', { ascending: true })
     setStudents(studentData || [])
 
     const { data: rangeData } = await supabase.from('blocked_ranges').select('*').order('start_date', { ascending: true })
@@ -161,34 +140,18 @@ export default function Admin() {
       .from('bookings')
       .select(`id, status, attendance, booked_at, slots!bookings_slot_id_fkey (slot_date, start_hour)`)
       .eq('student_id', student.id)
+      .order('booked_at', { ascending: false })
       .limit(20)
-    const sortedB = (bData || [])
-      .filter(b => b.slots)
-      .sort((a, b) => {
-        const dateA = `${a.slots.slot_date}T${String(a.slots.start_hour).padStart(2, '0')}:00`
-        const dateB = `${b.slots.slot_date}T${String(b.slots.start_hour).padStart(2, '0')}:00`
-        return dateA.localeCompare(dateB)
-      })
-    setStudentBookings(sortedB)
+    setStudentBookings((bData || []).filter(b => b.slots))
     setProfileLoading(false)
   }
 
   async function updateBeltRank(studentId, newRank) {
-    await fetch('/api/admin/update-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId, beltRank: newRank }) })
+    await supabase.from('users').update({ belt_rank: newRank }).eq('id', studentId)
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, belt_rank: newRank } : s))
     setSelectedStudent(prev => prev ? { ...prev, belt_rank: newRank } : prev)
     setEditingRank(false)
     setMessage(`Belt rank updated to ${newRank}.`)
-  }
-
-  async function updateProfile() {
-    const res = await fetch('/api/admin/update-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId: selectedStudent.id, firstName: editFirstName, lastName: editLastName, phone: editPhone, dob: editDob }) })
-    if (!res.ok) { setMessage('Failed to save.'); return }
-    const updates = { first_name: editFirstName, last_name: editLastName, full_name: [editFirstName, editLastName].filter(Boolean).join(' '), phone: editPhone, date_of_birth: editDob || null }
-    setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, ...updates } : s))
-    setSelectedStudent(prev => ({ ...prev, ...updates }))
-    setEditingProfile(false)
-    setMessage('Profile updated.')
   }
 
   async function markAttendance(bookingId, attendance) {
@@ -217,11 +180,8 @@ export default function Admin() {
   async function addTokens(studentId, amount) {
     const { data: tenant } = await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()
     await supabase.from('tokens').insert({ tenant_id: tenant.id, student_id: studentId, amount, reason: 'added by admin' })
+    setMessage(`${amount} token(s) added.`)
     if (selectedStudent?.id === studentId) setStudentTokens(prev => prev + amount)
-    // Auto-fulfill any pending recurring slots
-    const res = await fetch('/api/fulfill-pending', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId }) })
-    const { fulfilled } = await res.json()
-    setMessage(fulfilled > 0 ? `${amount} token(s) added. ${fulfilled} pending recurring slot${fulfilled > 1 ? 's' : ''} auto-confirmed.` : `${amount} token(s) added.`)
   }
 
 
@@ -250,13 +210,8 @@ export default function Admin() {
     if (!blockStart || !blockEnd) { setMessage('Please select a start and end date.'); return }
     const { data: tenant } = await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()
     await supabase.from('blocked_ranges').insert({ tenant_id: tenant.id, start_date: blockStart, end_date: blockEnd, reason: blockReason || 'Unavailable' })
-    const res = await fetch('/api/admin/block-and-cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'range', startDate: blockStart, endDate: blockEnd, reason: blockReason || 'Unavailable' })
-    })
-    const { cancelled } = await res.json()
-    setMessage(`Dates blocked from ${blockStart} to ${blockEnd}.${cancelled > 0 ? ` ${cancelled} booking${cancelled > 1 ? 's' : ''} cancelled and token${cancelled > 1 ? 's' : ''} refunded.` : ''}`)
+    await supabase.from('slots').update({ is_blocked: true, block_reason: blockReason || 'Unavailable' }).gte('slot_date', blockStart).lte('slot_date', blockEnd)
+    setMessage(`Dates blocked from ${blockStart} to ${blockEnd}.`)
     setBlockStart(''); setBlockEnd(''); setBlockReason('')
     loadData()
   }
@@ -270,13 +225,8 @@ export default function Admin() {
 
   async function blockSingleSlot() {
     if (!blockSlotDate) { setMessage('Please select a date.'); return }
-    const res = await fetch('/api/admin/block-and-cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'slot', slotDate: blockSlotDate, slotHour: blockSlotHour, reason: blockSlotReason || 'Unavailable' })
-    })
-    const { cancelled } = await res.json()
-    setMessage(`${blockSlotDate} at ${formatHour(blockSlotHour)} blocked.${cancelled > 0 ? ` ${cancelled} booking${cancelled > 1 ? 's' : ''} cancelled and token${cancelled > 1 ? 's' : ''} refunded.` : ''}`)
+    await supabase.from('slots').update({ is_blocked: true, block_reason: blockSlotReason || 'Unavailable' }).eq('slot_date', blockSlotDate).eq('start_hour', blockSlotHour)
+    setMessage(`${blockSlotDate} at ${formatHour(blockSlotHour)} blocked.`)
     setBlockSlotDate(''); setBlockSlotReason('')
     loadData()
   }
@@ -286,11 +236,16 @@ export default function Admin() {
     setMessage(`${slot.slot_date} at ${formatHour(slot.start_hour)} unblocked.`)
     loadData()
   }
+
+  if (!isAuthorized) return null
+
   const today = new Date()
-  const todayStr = localDateStr(today)
-  const referenceDate = new Date(today)
-  referenceDate.setDate(today.getDate() + weekOffset * 7)
-  const weekDates = getWeekDates(localDateStr(referenceDate))
+  const todayDay = today.getDay()
+  const mondayThisWeek = new Date(today)
+  mondayThisWeek.setDate(today.getDate() - ((todayDay + 6) % 7))
+  const referenceDate = new Date(mondayThisWeek)
+  referenceDate.setDate(mondayThisWeek.getDate() + weekOffset * 7)
+  const weekDates = getWeekDates(referenceDate.toISOString().split('T')[0])
   const weekStart = weekDates[0]
   const weekEnd = weekDates[6]
   const weekBookings = bookings.filter(b => b.slots?.slot_date >= weekStart && b.slots?.slot_date <= weekEnd)
@@ -299,14 +254,12 @@ export default function Admin() {
     return weekBookings.find(b => b.slots?.slot_date === date && b.slots?.start_hour === hour)
   }
 
+  function isDateBlocked(date) {
+    return blockedRanges.some(r => date >= r.start_date && date <= r.end_date)
+  }
+
   function getBlockedSlotForCell(date, hour) {
-    // Check individual blocked slots
-    const slot = blockedSlots.find(s => s.slot_date === date && Number(s.start_hour) === Number(hour))
-    if (slot) return slot.block_reason || 'Blocked'
-    // Check blocked date ranges
-    const inRange = blockedRanges.find(r => date >= r.start_date && date <= r.end_date)
-    if (inRange) return inRange.reason || 'Blocked'
-    return null
+    return blockedSlots.find(s => s.slot_date === date && s.start_hour === hour)
   }
 
   function formatWeekLabel() {
@@ -339,12 +292,11 @@ export default function Admin() {
 
       {message && <p style={{ background: '#1a3a1a', border: '1px solid #2a6a2a', padding: '0.75rem', borderRadius: '6px', color: '#66cc66' }}>{message}</p>}
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
         <button style={tabStyle('week')} onClick={() => setActiveTab('week')}>📅 Week View</button>
         <button style={tabStyle('bookings')} onClick={() => setActiveTab('bookings')}>📋 All Bookings</button>
         <button style={tabStyle('students')} onClick={() => setActiveTab('students')}>👥 Students</button>
         <button style={tabStyle('block')} onClick={() => setActiveTab('block')}>🔒 Block Dates</button>
-        <a href="/admin/book" style={{ marginLeft: 'auto', padding: '0.5rem 1.1rem', background: '#cc0000', color: '#fff', border: '1px solid #cc0000', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '0.5px', textDecoration: 'none' }}>+ Book a Lesson</a>
       </div>
 
       {/* ── WEEK VIEW ── */}
@@ -361,7 +313,7 @@ export default function Admin() {
           <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.25rem' }}>
             {weekDates.map(date => {
               const dayB = weekBookings.filter(b => b.slots?.slot_date === date)
-              const isToday = date === todayStr
+              const isToday = date === today.toISOString().split('T')[0]
               return (
                 <div key={date} style={{ flex: 1, textAlign: 'center', padding: '0.4rem 0.2rem', background: isToday ? '#3a0000' : '#2a2a2a', border: isToday ? '1px solid #cc0000' : '1px solid #333', borderRadius: '6px' }}>
                   <div style={{ color: '#999', fontSize: '0.7rem', textTransform: 'uppercase' }}>{DAY_NAMES[new Date(date + 'T00:00:00').getDay()]}</div>
@@ -371,15 +323,15 @@ export default function Admin() {
               )
             })}
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+          <div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <thead>
                 <tr>
-                  <th style={{ width: '70px', color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #333' }}>Time</th>
+                  <th style={{ width: '50px', color: '#666', fontSize: '0.65rem', textTransform: 'uppercase', padding: '0.3rem 0.2rem', textAlign: 'left', borderBottom: '1px solid #333' }}>Time</th>
                   {weekDates.map(date => {
-                    const isToday = date === todayStr
+                    const isToday = date === today.toISOString().split('T')[0]
                     return (
-                      <th key={date} style={{ color: isToday ? '#cc0000' : '#ccc', fontSize: '0.78rem', textTransform: 'uppercase', padding: '0.5rem 0.3rem', textAlign: 'center', borderBottom: '1px solid #333', background: isToday ? '#1a0000' : 'transparent' }}>
+                      <th key={date} style={{ color: isToday ? '#cc0000' : '#ccc', fontSize: '0.7rem', textTransform: 'uppercase', padding: '0.3rem 0.1rem', textAlign: 'center', borderBottom: '1px solid #333', background: isToday ? '#1a0000' : 'transparent' }}>
                         <div>{DAY_NAMES_FULL[new Date(date + 'T00:00:00').getDay()]}</div>
                         <div style={{ fontSize: '1rem', fontWeight: 'bold', color: isToday ? '#cc0000' : '#fff' }}>{new Date(date + 'T00:00:00').getDate()}</div>
                       </th>
@@ -390,35 +342,25 @@ export default function Admin() {
               <tbody>
                 {HOURS.map(hour => (
                   <tr key={hour}>
-                    <td style={{ color: '#555', fontSize: '0.75rem', padding: '0.4rem 0.5rem', borderBottom: '1px solid #1f1f1f', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{formatHour(hour)}</td>
+                    <td style={{ color: '#555', fontSize: '0.62rem', padding: '0.25rem 0.2rem', borderBottom: '1px solid #1f1f1f', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{formatHour(hour)}</td>
                     {weekDates.map(date => {
                       const booking = getBookingForCell(date, hour)
-                      const groupClass = getClassForCell(date, hour)
-                      const blockedReason = !groupClass ? getBlockedSlotForCell(date, hour) : null
-                      const isToday = date === todayStr
+                      const isToday = date === today.toISOString().split('T')[0]
+                      const badge = booking ? attendanceBadge(booking.attendance) : null
                       return (
-                        <td key={date} style={{ padding: '0.3rem', borderBottom: '1px solid #1f1f1f', background: isToday ? '#0d0000' : 'transparent', verticalAlign: 'top' }}>
-                          {groupClass ? (
-                            <div style={{ background: '#0a1a2a', border: '1px solid #1a5fa8', borderRadius: '5px', padding: '0.3rem 0.4rem' }}>
-                              <div style={{ color: '#7ab8f5', fontSize: '0.72rem', fontWeight: 'bold', lineHeight: 1.2 }}>{groupClass.label}</div>
-                              <div style={{ color: '#1a5fa8', fontSize: '0.6rem', textTransform: 'uppercase', marginTop: '2px' }}>Group Class</div>
-                            </div>
-                          ) : blockedReason ? (
-                            <div style={{ background: '#0a1f0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem' }}>
-                              <div style={{ color: '#66cc66', fontSize: '0.72rem', fontWeight: 'bold', lineHeight: 1.2 }}>🔒 Blocked</div>
-                              <div style={{ color: '#3a8a3a', fontSize: '0.6rem', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{blockedReason}</div>
-                            </div>
-                          ) : booking ? (
+                        <td key={date} style={{ padding: '0.1rem', borderBottom: '1px solid #1f1f1f', background: isToday ? '#0d0000' : 'transparent', verticalAlign: 'top' }}>
+                          {(() => { const blkSlot = getBlockedSlotForCell(date, hour); const dayBlk = isDateBlocked(date); return booking ? (
                             <div style={{ background: '#2a0000', border: '1px solid #cc0000', borderRadius: '5px', padding: '0.3rem 0.4rem' }}>
-                              <div style={{ color: '#fff', fontSize: '0.78rem', fontWeight: 'bold' }}>{sName(booking.users)}</div>
-                              <div style={{ color: '#cc0000', fontSize: '0.65rem', textTransform: 'uppercase' }}>Private Lesson</div>
+                              <div style={{ color: '#fff', fontSize: '0.62rem', fontWeight: 'bold' }}>{sName(booking.users)}</div>
+                              <div style={{ color: '#cc0000', fontSize: '0.52rem', textTransform: 'uppercase' }}>Private Lesson</div>
+                              {/* Attendance buttons */}
                               <div style={{ display: 'flex', gap: '2px', marginTop: '4px' }}>
-                                <button onClick={() => markAttendance(booking.id, 'attended')} style={{ flex: 1, padding: '2px 3px', fontSize: '0.6rem', background: booking.attendance === 'attended' ? '#2a6a2a' : '#1a1a1a', color: booking.attendance === 'attended' ? '#66cc66' : '#555', border: '1px solid #333', borderRadius: '3px', cursor: 'pointer' }}>✓</button>
-                                <button onClick={() => markAttendance(booking.id, 'dns')} style={{ flex: 1, padding: '2px 3px', fontSize: '0.6rem', background: booking.attendance === 'dns' ? '#6a2a2a' : '#1a1a1a', color: booking.attendance === 'dns' ? '#cc6666' : '#555', border: '1px solid #333', borderRadius: '3px', cursor: 'pointer' }}>DNS</button>
-                                <button onClick={() => cancelBooking(booking)} style={{ flex: 1, padding: '2px 3px', fontSize: '0.6rem', background: 'transparent', color: '#884444', border: '1px solid #442222', borderRadius: '3px', cursor: 'pointer' }}>✗</button>
+                                <button onClick={() => markAttendance(booking.id, 'attended')} style={{ flex: 1, padding: '1px 2px', fontSize: '0.55rem', background: booking.attendance === 'attended' ? '#2a6a2a' : '#1a1a1a', color: booking.attendance === 'attended' ? '#66cc66' : '#555', border: '1px solid #333', borderRadius: '3px', cursor: 'pointer' }}>✓</button>
+                                <button onClick={() => markAttendance(booking.id, 'dns')} style={{ flex: 1, padding: '1px 2px', fontSize: '0.55rem', background: booking.attendance === 'dns' ? '#6a2a2a' : '#1a1a1a', color: booking.attendance === 'dns' ? '#cc6666' : '#555', border: '1px solid #333', borderRadius: '3px', cursor: 'pointer' }}>DNS</button>
+                                <button onClick={() => cancelBooking(booking)} style={{ flex: 1, padding: '1px 2px', fontSize: '0.55rem', background: 'transparent', color: '#884444', border: '1px solid #442222', borderRadius: '3px', cursor: 'pointer' }}>✗</button>
                               </div>
                             </div>
-                          ) : <div style={{ height: '42px' }} />}
+                          ) : blkSlot ? (<div style={{ background: '#0a2a0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem' }}><div style={{ color: '#66cc66', fontSize: '0.55rem', fontWeight: 'bold' }}>🚫 Blocked</div>{blkSlot.block_reason && <div style={{ color: '#44aa44', fontSize: '0.5rem' }}>{blkSlot.block_reason}</div>}</div>) : dayBlk ? (<div style={{ background: '#0a2a0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem', opacity: 0.7 }}><div style={{ color: '#66cc66', fontSize: '0.55rem', fontWeight: 'bold' }}>🚫 Day Off</div></div>) : <div style={{ height: '42px' }} />; })()
                         </td>
                       )
                     })}
@@ -573,47 +515,17 @@ export default function Admin() {
 
                   {/* Info */}
                   <div style={{ marginBottom: '1rem' }}>
-                    {editingProfile ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>First Name</div>
-                            <input value={editFirstName} onChange={e => setEditFirstName(e.target.value)} style={{ width: '100%', padding: '0.4rem', background: '#2a2a2a', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Last Name</div>
-                            <input value={editLastName} onChange={e => setEditLastName(e.target.value)} style={{ width: '100%', padding: '0.4rem', background: '#2a2a2a', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Phone</div>
-                          <input value={editPhone} onChange={e => setEditPhone(e.target.value)} style={{ width: '100%', padding: '0.4rem', background: '#2a2a2a', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
-                        </div>
-                        <div>
-                          <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Date of Birth</div>
-                          <input type="date" value={editDob} onChange={e => setEditDob(e.target.value)} style={{ width: '100%', padding: '0.4rem', background: '#2a2a2a', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box', colorScheme: 'dark' }} />
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-                          <button onClick={updateProfile} style={{ flex: 1, padding: '0.4rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>Save</button>
-                          <button onClick={() => setEditingProfile(false)} style={{ flex: 1, padding: '0.4rem', background: 'transparent', color: '#888', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
-                        </div>
+                    {[
+                      { label: 'Email', value: selectedStudent.email },
+                      { label: 'Phone', value: selectedStudent.phone || '—' },
+                      { label: 'Date of Birth', value: selectedStudent.date_of_birth || '—' },
+                      { label: 'Tokens', value: studentTokens, highlight: true },
+                    ].map(({ label, value, highlight }) => (
+                      <div key={label} style={{ marginBottom: '0.6rem' }}>
+                        <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</div>
+                        <div style={{ color: highlight ? '#cc0000' : '#fff', fontSize: highlight ? '1.3rem' : '0.9rem', fontWeight: highlight ? 'bold' : 'normal' }}>{value}</div>
                       </div>
-                    ) : (
-                      <>
-                        {[
-                          { label: 'Email', value: selectedStudent.email },
-                          { label: 'Phone', value: selectedStudent.phone || '—' },
-                          { label: 'Date of Birth', value: selectedStudent.date_of_birth || '—' },
-                          { label: 'Tokens', value: studentTokens, highlight: true },
-                        ].map(({ label, value, highlight }) => (
-                          <div key={label} style={{ marginBottom: '0.6rem' }}>
-                            <div style={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</div>
-                            <div style={{ color: highlight ? '#cc0000' : '#fff', fontSize: highlight ? '1.3rem' : '0.9rem', fontWeight: highlight ? 'bold' : 'normal' }}>{value}</div>
-                          </div>
-                        ))}
-                        <button onClick={() => { setEditingProfile(true); setEditFirstName(selectedStudent.first_name || ''); setEditLastName(selectedStudent.last_name || ''); setEditPhone(selectedStudent.phone || ''); setEditDob(selectedStudent.date_of_birth || '') }} style={{ padding: '0.3rem 0.75rem', background: '#2a2a2a', color: '#aaa', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', marginTop: '0.25rem' }}>Edit Info</button>
-                      </>
-                    )}
+                    ))}
                   </div>
 
                   {/* Token buttons */}
