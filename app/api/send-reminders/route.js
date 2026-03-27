@@ -20,6 +20,7 @@ export async function GET(request) {
   // Find bookings in ~24hrs and ~2hrs windows (±15 min tolerance)
   const windows = [
     { hours: 48, label: '48h', prefKey: 'notification_48h' },
+    { hours: 48, label: '48h', prefKey: 'notification_48h' },
     { hours: 24, label: '24h', prefKey: 'notification_24h' },
     { hours: 2, label: '2h', prefKey: 'notification_2h' },
   ]
