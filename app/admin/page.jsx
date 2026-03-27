@@ -14,19 +14,15 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 10)
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-function localDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 function getWeekDates(referenceDate) {
-  const d = new Date(referenceDate + 'T00:00:00')
+  const d = new Date(referenceDate)
   const day = d.getDay()
   const monday = new Date(d)
   monday.setDate(d.getDate() - ((day + 6) % 7))
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday)
     date.setDate(monday.getDate() + i)
-    return localDateStr(date)
+    return date.toISOString().split('T')[0]
   })
 }
 
@@ -249,7 +245,7 @@ export default function Admin() {
   mondayThisWeek.setDate(today.getDate() - ((todayDay + 6) % 7))
   const referenceDate = new Date(mondayThisWeek)
   referenceDate.setDate(mondayThisWeek.getDate() + weekOffset * 7)
-  const weekDates = getWeekDates(localDateStr(referenceDate))
+  const weekDates = getWeekDates(referenceDate.toISOString().split('T')[0])
   const weekStart = weekDates[0]
   const weekEnd = weekDates[6]
   const weekBookings = bookings.filter(b => b.slots?.slot_date >= weekStart && b.slots?.slot_date <= weekEnd)
@@ -364,7 +360,7 @@ export default function Admin() {
                                 <button onClick={() => cancelBooking(booking)} style={{ flex: 1, padding: '1px 2px', fontSize: '0.55rem', background: 'transparent', color: '#884444', border: '1px solid #442222', borderRadius: '3px', cursor: 'pointer' }}>✗</button>
                               </div>
                             </div>
-                          ) : blkSlot ? (<div style={{ background: '#0a2a0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem' }}><div style={{ color: '#66cc66', fontSize: '0.55rem', fontWeight: 'bold' }}>🚫 Blocked</div>{blkSlot.block_reason && <div style={{ color: '#44aa44', fontSize: '0.5rem' }}>{blkSlot.block_reason}</div>}</div>) : dayBlk ? (<div style={{ background: '#0a2a0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem', opacity: 0.7 }}><div style={{ color: '#66cc66', fontSize: '0.55rem', fontWeight: 'bold' }}>🚫 Day Off</div></div>) : <div style={{ height: '42px' }} />; })()}
+                          ) : blkSlot ? (<div style={{ background: '#0a2a0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem' }}><div style={{ color: '#66cc66', fontSize: '0.55rem', fontWeight: 'bold' }}>🚫 Blocked</div>{blkSlot.block_reason && <div style={{ color: '#44aa44', fontSize: '0.5rem' }}>{blkSlot.block_reason}</div>}</div>) : dayBlk ? (<div style={{ background: '#0a2a0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem', opacity: 0.7 }}><div style={{ color: '#66cc66', fontSize: '0.55rem', fontWeight: 'bold' }}>🚫 Day Off</div></div>) : <div style={{ height: '42px' }} />; })()
                         </td>
                       )
                     })}
