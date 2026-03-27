@@ -54,9 +54,11 @@ export default function Dashboard() {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [bookings, setBookings] = useState([])
+  const [history, setHistory] = useState([])
   const [balance, setBalance] = useState(0)
   const [cancelPrompt, setCancelPrompt] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [activeTab, setActiveTab] = useState('upcoming')
 
   useEffect(() => {
     async function load() {
@@ -65,6 +67,8 @@ export default function Dashboard() {
       setUser(user)
       const { data: profileData } = await supabase.from('users').select('first_name, last_name, phone, belt_rank').eq('id', user.id).single()
       setProfile(profileData)
+
+      // Upcoming bookings
       const { data: bookingData } = await supabase
         .from('bookings')
         .select(`id, status, booked_at, tenant_id, student_id, is_recurring, recurring_group_id, slots!bookings_slot_id_fkey ( id, slot_date, start_hour )`)
@@ -72,6 +76,18 @@ export default function Dashboard() {
         .in('status', ['confirmed', 'pending_token'])
         .order('booked_at', { ascending: true })
       setBookings((bookingData || []).filter(b => b.slots))
+
+      // History — past confirmed/cancelled bookings with attendance
+      const { data: historyData } = await supabase
+        .from('bookings')
+        .select(`id, status, attendance, booked_at, slots!bookings_slot_id_fkey ( slot_date, start_hour )`)
+        .eq('student_id', user.id)
+        .in('status', ['confirmed', 'cancelled'])
+        .order('booked_at', { ascending: false })
+      const today = localDateStr(new Date())
+      const past = (historyData || []).filter(b => b.slots && b.slots.slot_date < today)
+      setHistory(past)
+
       const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
       const total = (tokenData || []).reduce((sum, t) => sum + t.amount, 0)
       setBalance(total)
@@ -254,8 +270,84 @@ export default function Dashboard() {
         </div>
       )}
 
-      <h2 style={{ color: 'var(--text)', borderBottom: '1px solid var(--border)', paddingBottom: '0.6rem', marginBottom: '1.25rem', fontSize: '1.1rem', letterSpacing: '0.5px', textTransform: 'uppercase', fontFamily: 'Georgia, serif' }}>Upcoming Lessons</h2>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+        {['upcoming', 'history'].map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+            flex: 1, padding: '0.65rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700,
+            fontSize: '0.88rem', letterSpacing: '1px', textTransform: 'uppercase',
+            background: activeTab === tab ? '#cc0000' : '#2a2a2a',
+            color: activeTab === tab ? '#fff' : '#888',
+            boxShadow: activeTab === tab ? '0 2px 12px rgba(204,0,0,0.3)' : 'none',
+            transition: 'all 0.15s'
+          }}>
+            {tab === 'upcoming' ? '📅 Upcoming' : '📋 History'}
+          </button>
+        ))}
+      </div>
 
+      {/* ── HISTORY TAB ── */}
+      {activeTab === 'history' && (
+        <div>
+          {history.length === 0 ? (
+            <p style={{ color: '#666' }}>No lesson history yet.</p>
+          ) : (
+            history.map(b => {
+              const att = b.attendance
+              const isCancelled = b.status === 'cancelled'
+              const attConfig = att === 'attended'
+                ? { bg: '#0a1f0a', border: '#2a6a2a', color: '#66cc66', icon: '✓', label: 'Attended' }
+                : att === 'dns'
+                ? { bg: '#1f0a0a', border: '#6a2a2a', color: '#cc6666', icon: '✗', label: 'Did Not Show' }
+                : isCancelled
+                ? { bg: '#1a1a1a', border: '#444', color: '#666', icon: '—', label: 'Cancelled' }
+                : { bg: '#1a1a1a', border: '#444', color: '#666', icon: '—', label: 'No Record' }
+              return (
+                <div key={b.id} style={{
+                  background: attConfig.bg,
+                  border: `1px solid ${attConfig.border}`,
+                  borderRadius: '10px',
+                  padding: '0.9rem 1.25rem',
+                  marginBottom: '0.6rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem'
+                }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                      <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem' }}>{b.slots.slot_date}</span>
+                      <span style={{ color: '#555' }}>·</span>
+                      <span style={{ color: '#aaa', fontSize: '0.9rem' }}>{formatHour(b.slots.start_hour)}</span>
+                    </div>
+                    <div style={{ color: '#555', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Private Lesson</div>
+                  </div>
+                  <div style={{
+                    background: attConfig.border,
+                    color: attConfig.color,
+                    borderRadius: '20px',
+                    padding: '0.3rem 0.85rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.5px',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}>
+                    <span>{attConfig.icon}</span>
+                    <span>{attConfig.label}</span>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
+
+      {/* ── UPCOMING TAB ── */}
+      {activeTab === 'upcoming' && (
+      <>
       {allItems.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
       ) : (
@@ -356,6 +448,8 @@ export default function Dashboard() {
             </div>
           )
         })}
+      )}
+      </>
       )}
 
       <a href="/book" style={{ display: 'block', marginTop: '1.5rem', padding: '0.9rem', background: 'var(--red)', color: '#fff', textDecoration: 'none', borderRadius: 'var(--radius-sm)', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.95rem', textAlign: 'center', boxShadow: '0 2px 12px var(--red-glow)' }}>
