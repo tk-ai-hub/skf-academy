@@ -18,19 +18,6 @@ function formatDateShort(d) {
   return date.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-// Recurring group classes — not bookable by students
-const RECURRING_CLASSES = [
-  { dayOfWeek: 2, hour: 18 }, // Tuesday 6PM Kids Class
-  { dayOfWeek: 4, hour: 18 }, // Thursday 6PM Kids Class
-  { dayOfWeek: 2, hour: 21 }, // Tuesday 9PM Skill Development
-  { dayOfWeek: 4, hour: 21 }, // Thursday 9PM Skill Development
-]
-
-function isGroupClass(slotDate, startHour) {
-  const dow = new Date(slotDate + 'T00:00:00').getDay()
-  return RECURRING_CLASSES.some(c => c.dayOfWeek === dow && c.hour === Number(startHour))
-}
-
 function isBirthday(dateStr, dob) {
   if (!dob) return false
   const [, month, day] = dateStr.split('-').map(Number)
@@ -50,6 +37,16 @@ function getWeeklyOccurrences(startDate, numWeeks) {
     occurrences.push(addWeeks(startDate, i))
   }
   return occurrences
+}
+
+const GROUP_CLASSES = [
+  { name: 'Kids Class', label: '6:00 PM', days: [2, 4], hour: 18, color: '#0a1f0a', border: '#2a6a2a' },
+  { name: 'Skill Development Class', label: '9:00 PM', days: [2, 4], hour: 21, color: '#0a1020', border: '#1a4a8a' },
+]
+
+function isGroupClass(slotDate, startHour) {
+  const dow = new Date(slotDate + 'T00:00:00').getDay()
+  return GROUP_CLASSES.some(c => c.days.includes(dow) && c.hour === Number(startHour))
 }
 
 // Check if a slot is within 24 hours from now
@@ -178,43 +175,28 @@ export default function Book() {
           const s = slots.find(s2 => s2.slot_date === date && s2.start_hour === selectedSlot.start_hour)
           if (s && !bookedIds.includes(s.id) && !isWithin24Hours(date, selectedSlot.start_hour)) availableSlots.push(s)
         }
-        if (availableSlots.length === 0) {
-          setMessage('No available slots found for this recurring series.')
+        if (currentBalance < availableSlots.length) {
+          setMessage(`You only have ${currentBalance} token(s) but need ${availableSlots.length}.`)
           return
         }
         const studentName = profile?.first_name ? `${profile.last_name || ''} ${profile.first_name}`.trim() : user.email
         const newBookedIds = []
-        let tokensUsed = 0
-        let pendingCount = 0
         const groupId = selectedSlot.id + '-' + Date.now()
-        let remainingBalance = currentBalance
         for (const s of availableSlots) {
-          const hasToken = remainingBalance > 0
-          const status = hasToken ? 'confirmed' : 'pending_token'
           const { data: newBooking, error } = await supabase
             .from('bookings')
-            .insert({ tenant_id: s.tenant_id, student_id: user.id, slot_id: s.id, status, is_recurring: true, recurring_group_id: groupId })
+            .insert({ tenant_id: s.tenant_id, student_id: user.id, slot_id: s.id, status: 'confirmed', is_recurring: true, recurring_group_id: groupId })
             .select().single()
           if (!error && newBooking) {
-            if (hasToken) {
-              await supabase.from('tokens').insert({ tenant_id: s.tenant_id, student_id: user.id, amount: -1, reason: 'recurring lesson booked', booking_id: newBooking.id })
-              remainingBalance--
-              tokensUsed++
-              await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'booking', studentEmail: user.email, studentName, phone: profile?.phone || '', date: s.slot_date, time: formatHour(s.start_hour), hour: s.start_hour }) })
-            } else {
-              pendingCount++
-            }
+            await supabase.from('tokens').insert({ tenant_id: s.tenant_id, student_id: user.id, amount: -1, reason: 'recurring lesson booked', booking_id: newBooking.id })
             newBookedIds.push(s.id)
+            await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'booking', studentEmail: user.email, studentName, phone: profile?.phone || '', date: s.slot_date, time: formatHour(s.start_hour), hour: s.start_hour, isRecurring: true, totalOccurrences: availableSlots.length }) })
           }
         }
-        setBalance(currentBalance - tokensUsed)
+        setBalance(currentBalance - newBookedIds.length)
         setBookedIds(prev => [...prev, ...newBookedIds])
         setSelectedSlot(null)
-        if (pendingCount > 0) {
-          setMessage(`✅ Reserved ${newBookedIds.length} weekly slots at ${formatHour(selectedSlot.start_hour)}. ${tokensUsed} confirmed now, ${pendingCount} will auto-confirm as tokens are added.`)
-        } else {
-          setMessage(`✅ Booked ${tokensUsed} recurring lesson${tokensUsed > 1 ? 's' : ''} every week at ${formatHour(selectedSlot.start_hour)}!`)
-        }
+        setMessage(`✅ Booked ${newBookedIds.length} recurring lesson${newBookedIds.length > 1 ? 's' : ''} every week at ${formatHour(selectedSlot.start_hour)}!`)
       } else {
         if (currentBalance <= 0) { setMessage('You have no tokens left. Please contact your instructor to add more.'); return }
         const { data: newBooking, error } = await supabase
@@ -237,152 +219,159 @@ export default function Book() {
 
   return (
     <main>
-      {/* Header row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <a href="/dashboard" style={{ color: 'var(--text3)', textDecoration: 'none', fontSize: '0.82rem', letterSpacing: '0.5px' }}>← Dashboard</a>
-          <h2 style={{ color: 'var(--text)', margin: '0.3rem 0 0', fontSize: '1.35rem', fontFamily: 'Georgia, serif', letterSpacing: '0.5px' }}>Book a Lesson</h2>
-        </div>
-        <div className="token-badge" style={{ padding: '0.6rem 1rem', flexDirection: 'column', alignItems: 'center', gap: 0, minWidth: '72px' }}>
-          <div style={{ color: 'var(--red)', fontSize: '0.65rem', letterSpacing: '1.5px', textTransform: 'uppercase', fontWeight: 600 }}>Tokens</div>
-          <div style={{ color: '#fff', fontSize: '1.75rem', fontWeight: 800, lineHeight: 1.1 }}>{balance}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <h2 style={{ color: '#fff', margin: 0, letterSpacing: '1px', textTransform: 'uppercase' }}>Book a Private Lesson</h2>
+        <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', borderRadius: '6px', padding: '0.5rem 1rem', textAlign: 'center' }}>
+          <div style={{ color: '#cc0000', fontSize: '0.7rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Tokens</div>
+          <div style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 'bold' }}>{balance}</div>
         </div>
       </div>
 
+      <div style={{ marginBottom: '1.5rem' }}>
+        <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Select a Date</label>
+        <select value={selectedDate} onChange={e => { setSelectedDate(e.target.value); setSelectedSlot(null) }} style={{ width: '100%', padding: '0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '1rem' }}>
+          {availableDates.map(d => (
+            <option key={d} value={d}>{formatDate(d)}{isBirthday(d, profile?.date_of_birth) ? ' 🎂' : ''}</option>
+          ))}
+        </select>
+      </div>
+
       {birthdayToday && (
-        <div style={{ background: 'linear-gradient(90deg,#2a0000,#1a0000)', border: '1px solid var(--red)', borderRadius: 'var(--radius)', padding: '0.75rem 1.25rem', marginBottom: '1.25rem', textAlign: 'center' }}>
-          <p style={{ margin: 0, color: '#ff6666' }}>Happy Birthday{profile?.first_name ? `, ${profile.first_name}` : ''}! 🎂</p>
+        <div style={{ background: '#2a1a1a', border: '1px solid #cc0000', borderRadius: '8px', padding: '0.75rem 1.5rem', marginBottom: '1.5rem', textAlign: 'center' }}>
+          <p style={{ margin: 0, color: '#cc0000' }}>Happy Birthday{profile?.first_name ? `, ${profile.first_name}` : ''}! 🎂</p>
         </div>
       )}
 
-      {/* Date selector */}
-      <span className="section-label">Select a Date</span>
-      {availableDates.length === 0 ? (
-        <p style={{ color: 'var(--text3)', marginBottom: '1.5rem' }}>No available dates in the next 90 days.</p>
-      ) : (
-        <div className="date-strip" style={{ marginBottom: '1.5rem' }}>
-          {availableDates.map(d => {
-            const dt = new Date(d + 'T00:00:00')
-            const isActive = d === selectedDate
-            const isBday = isBirthday(d, profile?.date_of_birth)
-            return (
-              <div
-                key={d}
-                className={`date-card${isActive ? ' active' : ''}`}
-                onClick={() => { setSelectedDate(d); setSelectedSlot(null) }}
-              >
-                <span className="day-name">{dt.toLocaleDateString('en-CA', { weekday: 'short' })}</span>
-                <span className="day-num">{dt.getDate()}</span>
-                <span className="month">{dt.toLocaleDateString('en-CA', { month: 'short' })}{isBday ? ' 🎂' : ''}</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Recurring toggle */}
-      <div className="card" style={{ marginBottom: '1.25rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+      <div style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ color: 'var(--text)', fontWeight: 600, fontSize: '0.95rem' }}>Recurring Weekly</div>
-            <div style={{ color: 'var(--text3)', fontSize: '0.8rem', marginTop: '0.2rem' }}>Reserve the same time every week</div>
+            <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>Recurring Weekly Booking</div>
+            <div style={{ color: '#666', fontSize: '0.8rem', marginTop: '0.2rem' }}>Book the same time slot every week</div>
           </div>
-          <button
-            className="toggle-track"
-            onClick={() => { setIsRecurring(!isRecurring); setSelectedSlot(null) }}
-            style={{ background: isRecurring ? 'var(--red)' : 'var(--border2)' }}
-          >
-            <div className="toggle-thumb" style={{ left: isRecurring ? '25px' : '3px' }} />
+          <button onClick={() => { setIsRecurring(!isRecurring); setSelectedSlot(null) }} style={{ width: '48px', height: '26px', borderRadius: '13px', border: 'none', cursor: 'pointer', background: isRecurring ? '#cc0000' : '#444', position: 'relative', transition: 'background 0.2s' }}>
+            <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '3px', transition: 'left 0.2s', left: isRecurring ? '25px' : '3px' }} />
           </button>
         </div>
         {isRecurring && (
-          <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-            <span className="section-label">Number of Weeks</span>
+          <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #333' }}>
+            <label style={{ color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', display: 'block', marginBottom: '0.5rem' }}>Number of Weeks</label>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {[4, 8, 12, 16, 24].map(w => (
-                <button
-                  key={w}
-                  onClick={() => setRecurringWeeks(w)}
-                  style={{ padding: '0.45rem 1rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, background: recurringWeeks === w ? 'var(--red)' : 'var(--bg)', color: '#fff', border: `1.5px solid ${recurringWeeks === w ? 'var(--red)' : 'var(--border2)'}`, transition: 'all 0.15s' }}
-                >
-                  {w}w
-                </button>
+              {[2, 4, 6, 8, 12].map(w => (
+                <button key={w} onClick={() => setRecurringWeeks(w)} style={{ padding: '0.4rem 1rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem', background: recurringWeeks === w ? '#cc0000' : '#1a1a1a', color: '#fff', border: recurringWeeks === w ? '1px solid #cc0000' : '1px solid #444' }}>{w}w</button>
               ))}
             </div>
-            <p style={{ color: 'var(--text3)', fontSize: '0.8rem', margin: '0.75rem 0 0' }}>
-              Select a time below · slots beyond your current tokens are reserved automatically
-            </p>
+            <p style={{ color: '#666', fontSize: '0.8rem', margin: '0.75rem 0 0' }}>⚡ Select a time below — we'll book it every week for {recurringWeeks} weeks ({recurringWeeks} tokens)</p>
           </div>
         )}
       </div>
 
-      {/* Time slots */}
-      <span className="section-label">Available Times — {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem', marginBottom: '1.5rem' }}>
+      {/* Group Classes for selected date */}
+      {(() => {
+        if (!selectedDate) return null
+        const dayOfWeek = new Date(selectedDate + 'T00:00:00').getDay()
+        const classesToday = GROUP_CLASSES.filter(c => c.days.includes(dayOfWeek))
+        if (classesToday.length === 0) return null
+        return (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Group Classes This Day</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {classesToday.map(c => (
+                <div key={c.name} style={{ background: c.color, border: `1px solid ${c.border}`, borderRadius: '8px', padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>{c.name}</div>
+                    <div style={{ color: '#aaa', fontSize: '0.8rem', marginTop: '2px' }}>{c.label}</div>
+                  </div>
+                  <div style={{ color: '#aaa', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Group</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
+      <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1rem' }}>Available Times</label>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
         {slotsForDate.map(slot => {
           const isSelected = selectedSlot?.id === slot.id
           const blocked = isWithin24Hours(slot.slot_date, slot.start_hour)
           return (
             <button
               key={slot.id}
-              className={`slot-btn${isSelected ? ' selected' : ''}${blocked ? ' blocked' : ''}`}
               onClick={() => handleSlotClick(slot)}
               disabled={isProcessing || blocked}
               title={blocked ? 'Cannot book within 24 hours' : ''}
+              style={{
+                padding: '0.85rem',
+                background: blocked ? '#1a1a1a' : isSelected ? '#cc0000' : '#2a2a2a',
+                color: blocked ? '#444' : '#fff',
+                border: isSelected ? '1px solid #ff3333' : blocked ? '1px solid #333' : '1px solid #444',
+                borderRadius: '6px',
+                cursor: blocked ? 'not-allowed' : isProcessing ? 'not-allowed' : 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: isSelected ? 'bold' : 'normal',
+                transform: isSelected ? 'scale(1.05)' : 'scale(1)',
+                transition: 'all 0.15s',
+                opacity: isProcessing ? 0.6 : 1
+              }}
             >
               {formatHour(slot.start_hour)}
-              {blocked && <div style={{ fontSize: '0.6rem', marginTop: '2px', opacity: 0.7 }}>24hr limit</div>}
+              {isSelected && <div style={{ fontSize: '0.65rem', marginTop: '2px', opacity: 0.85 }}>✓ selected</div>}
+              {blocked && <div style={{ fontSize: '0.6rem', marginTop: '2px', color: '#555' }}>24hr limit</div>}
             </button>
           )
         })}
-        {slotsForDate.length === 0 && (
-          <p style={{ color: 'var(--text3)', gridColumn: '1 / -1', margin: 0, fontSize: '0.9rem' }}>No available times for this date.</p>
-        )}
+        {slotsForDate.length === 0 && <p style={{ color: '#666', gridColumn: '1 / -1', margin: 0 }}>No available times for this date.</p>}
       </div>
 
-      {/* Recurring preview */}
       {isRecurring && selectedSlot && recurringPreview.length > 0 && (
-        <div className="card" style={{ marginBottom: '1.25rem', border: '1px solid var(--border2)' }}>
-          <div style={{ color: 'var(--text)', fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
-            Weekly Schedule — {formatHour(selectedSlot.start_hour)}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem' }}>
+        <div style={{ background: '#1a1a1a', border: '1px solid #444', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+          <h3 style={{ color: '#fff', margin: '0 0 1rem', fontSize: '1rem', letterSpacing: '1px', textTransform: 'uppercase' }}>
+            📅 Recurring Preview — {formatHour(selectedSlot.start_hour)} Weekly
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             {recurringPreview.map(({ date, available }) => (
-              <div key={date} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0' }}>
-                <span style={{ color: available ? 'var(--green)' : '#555', fontSize: '0.8rem', width: '14px', flexShrink: 0 }}>{available ? '✓' : '✗'}</span>
-                <span style={{ color: available ? 'var(--text)' : 'var(--text3)', fontSize: '0.85rem' }}>{formatDateShort(date)}</span>
+              <div key={date} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ color: available ? '#66cc66' : '#cc6666', fontSize: '0.85rem', width: '16px' }}>{available ? '✓' : '✗'}</span>
+                <span style={{ color: available ? '#fff' : '#666', fontSize: '0.9rem' }}>{formatDateShort(date)}</span>
+                {!available && <span style={{ color: '#555', fontSize: '0.78rem' }}>not available</span>}
               </div>
             ))}
           </div>
-          <div style={{ color: 'var(--text3)', fontSize: '0.82rem', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
-            {availableCount} confirmed now
-            {recurringWeeks - availableCount > 0 && <span style={{ color: 'var(--gold)', marginLeft: '0.5rem' }}>· {recurringWeeks - availableCount} reserved (pending token)</span>}
+          <div style={{ color: '#999', fontSize: '0.85rem', marginTop: '0.75rem' }}>
+            {availableCount} of {recurringWeeks} slots available · <span style={{ color: '#cc0000' }}>{availableCount} tokens</span>
           </div>
         </div>
       )}
 
-      {/* Confirm bar */}
       {selectedSlot && (
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--red)', borderRadius: 'var(--radius)', padding: '1rem 1.25rem', marginBottom: '1.5rem', boxShadow: '0 0 20px var(--red-glow)' }}>
-          <div style={{ color: 'var(--text3)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.3rem' }}>Your Selection</div>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.75rem' }}>
-            {formatDate(selectedDate)} · {formatHour(selectedSlot.start_hour)}
-            {isRecurring && <span style={{ color: 'var(--red)', fontWeight: 400, fontSize: '0.85rem', marginLeft: '0.5rem' }}>× {recurringWeeks} weeks</span>}
+        <div style={{ background: '#1a1a1a', border: '1px solid #cc0000', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ color: '#999', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Selected</div>
+            <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.05rem' }}>
+              {formatDate(selectedDate)} at {formatHour(selectedSlot.start_hour)}
+            </div>
+            {isRecurring && (
+              <div style={{ color: '#cc0000', fontSize: '0.8rem', marginTop: '0.2rem' }}>
+                🔁 {availableCount} weekly lessons · {availableCount} tokens
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <button onClick={() => { setSelectedSlot(null); setMessage('') }} disabled={isProcessing} className="btn-secondary" style={{ width: 'auto', padding: '0.65rem 1.1rem', fontSize: '0.85rem' }}>Clear</button>
-            <button onClick={bookSlot} disabled={isProcessing} className="btn-primary" style={{ flex: 1, padding: '0.75rem' }}>
-              {isProcessing ? 'Booking...' : isRecurring ? `Reserve ${recurringWeeks} Weeks` : 'Confirm Booking'}
+            <button onClick={() => { setSelectedSlot(null); setMessage('') }} disabled={isProcessing} style={{ padding: '0.6rem 1.1rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>Clear</button>
+            <button onClick={bookSlot} disabled={isProcessing} style={{ padding: '0.6rem 1.5rem', background: isProcessing ? '#661111' : '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: isProcessing ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.95rem', opacity: isProcessing ? 0.7 : 1 }}>
+              {isProcessing ? 'Booking...' : isRecurring ? `Confirm ${availableCount} Bookings` : 'Confirm Booking'}
             </button>
           </div>
         </div>
       )}
 
       {message && (
-        <div style={{ background: message.includes('⚠️') ? '#2a1a00' : '#0d2a14', border: `1px solid ${message.includes('⚠️') ? '#aa6600' : '#1a5a2a'}`, borderRadius: 'var(--radius)', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-          <p style={{ margin: 0, color: message.includes('⚠️') ? '#ffaa44' : '#4ade80', fontSize: '0.95rem' }}>{message}</p>
+        <div style={{ background: message.includes('⚠️') ? '#2a1a00' : '#1a3a1a', border: `1px solid ${message.includes('⚠️') ? '#aa6600' : '#2a6a2a'}`, borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
+          <p style={{ margin: 0, color: message.includes('⚠️') ? '#ffaa44' : '#66cc66', fontWeight: 'bold' }}>{message}</p>
         </div>
       )}
+
+      <a href="/dashboard" style={{ color: '#666', textDecoration: 'none', fontSize: '0.9rem' }}>← Back to dashboard</a>
     </main>
   )
 }
