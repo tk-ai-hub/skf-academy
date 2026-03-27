@@ -364,7 +364,7 @@ export default function Admin() {
                                 <button onClick={() => cancelBooking(booking)} style={{ flex: 1, padding: '1px 2px', fontSize: '0.55rem', background: 'transparent', color: '#884444', border: '1px solid #442222', borderRadius: '3px', cursor: 'pointer' }}>✗</button>
                               </div>
                             </div>
-                          ) : blkSlot ? (<div style={{ background: '#0a2a0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem' }}><div style={{ color: '#66cc66', fontSize: '0.55rem', fontWeight: 'bold' }}>🚫 Blocked</div>{blkSlot.block_reason && <div style={{ color: '#44aa44', fontSize: '0.5rem' }}>{blkSlot.block_reason}</div>}</div>) : dayBlk ? (<div style={{ background: '#0a2a0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem', opacity: 0.7 }}><div style={{ color: '#66cc66', fontSize: '0.55rem', fontWeight: 'bold' }}>🚫 Day Off</div></div>) : <div style={{ height: '42px' }} />; })()
+                          ) : blkSlot ? (<div style={{ background: '#0a2a0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem' }}><div style={{ color: '#66cc66', fontSize: '0.55rem', fontWeight: 'bold' }}>🚫 Blocked</div>{blkSlot.block_reason && <div style={{ color: '#44aa44', fontSize: '0.5rem' }}>{blkSlot.block_reason}</div>}</div>) : dayBlk ? (<div style={{ background: '#0a2a0a', border: '1px solid #2a6a2a', borderRadius: '5px', padding: '0.3rem 0.4rem', opacity: 0.7 }}><div style={{ color: '#66cc66', fontSize: '0.55rem', fontWeight: 'bold' }}>🚫 Day Off</div></div>) : <div style={{ height: '42px' }} />; })()}
                         </td>
                       )
                     })}
