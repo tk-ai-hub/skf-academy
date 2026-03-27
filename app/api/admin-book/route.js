@@ -111,5 +111,5 @@ export async function POST(request) {
   // Add to Google Calendar
   await addToGoogleCalendar(slot.slot_date, slot.start_hour, studentName, studentPhone || 'No phone')
 
-  return Response.json({ success: true, booking, studentName })
+  return Response.json({ success: true, booking, studentName, studentId: userId })
 }

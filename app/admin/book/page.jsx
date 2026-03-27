@@ -68,7 +68,7 @@ export default function AdminBook() {
   const [slotBookingCounts, setSlotBookingCounts] = useState({})
   const [availableDates, setAvailableDates] = useState([])
   const [selectedDate, setSelectedDate] = useState('')
-  const [selectedSlot, setSelectedSlot] = useState(null)
+  const [selectedSlots, setSelectedSlots] = useState([]) // multi-select
 
   // UI state
   const [message, setMessage] = useState('')
@@ -176,47 +176,68 @@ export default function AdminBook() {
     setStep(2)
   }
 
+  function toggleSlot(slot) {
+    setSelectedSlots(prev => {
+      const exists = prev.find(s => s.id === slot.id)
+      return exists ? prev.filter(s => s.id !== slot.id) : [...prev, slot]
+    })
+  }
+
   function goToStep3() {
-    if (!selectedSlot) { setMessage('Please select a time slot.'); return }
+    if (selectedSlots.length === 0) { setMessage('Please select at least one time slot.'); return }
     setMessage('')
     setStep(3)
   }
 
   async function confirmBooking() {
-    if (!selectedSlot || isProcessing) return
+    if (selectedSlots.length === 0 || isProcessing) return
     setIsProcessing(true)
     setMessage('')
 
-    const payload = {
-      slotId: selectedSlot.id,
-      ...(isNewClient
-        ? { guestFirstName: guestFirstName.trim(), guestLastName: guestLastName.trim(), guestPhone: guestPhone.trim() }
-        : { studentId: selectedStudent.id }
-      )
+    const clientPayload = isNewClient
+      ? { guestFirstName: guestFirstName.trim(), guestLastName: guestLastName.trim(), guestPhone: guestPhone.trim() }
+      : { studentId: selectedStudent.id }
+
+    const results = []
+    let studentName = ''
+    let lastError = ''
+
+    for (const slot of selectedSlots) {
+      try {
+        const res = await fetch('/api/admin-book', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slotId: slot.id, ...clientPayload })
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          lastError = data.error || 'Something went wrong'
+          results.push({ slot, ok: false, error: lastError })
+        } else {
+          studentName = data.studentName
+          results.push({ slot, ok: true })
+          // Once guest is created on first call, switch to studentId for subsequent calls
+          if (isNewClient && data.studentId && !clientPayload.studentId) {
+            clientPayload.studentId = data.studentId
+            delete clientPayload.guestFirstName
+            delete clientPayload.guestLastName
+            delete clientPayload.guestPhone
+          }
+        }
+      } catch (err) {
+        results.push({ slot, ok: false, error: err.message })
+      }
     }
 
-    try {
-      const res = await fetch('/api/admin-book', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setMessage('Error: ' + (data.error || 'Something went wrong'))
-        return
-      }
-      setSuccess({
-        studentName: data.studentName,
-        date: selectedSlot.slot_date,
-        hour: selectedSlot.start_hour
-      })
-      // Remove booked slot from local state
-      setSlots(prev => prev.filter(s => s.id !== selectedSlot.id))
-    } catch (err) {
-      setMessage('Network error: ' + err.message)
-    } finally {
-      setIsProcessing(false)
+    setIsProcessing(false)
+    const booked = results.filter(r => r.ok)
+    const failed = results.filter(r => !r.ok)
+
+    if (booked.length > 0) {
+      setSuccess({ studentName, booked: booked.map(r => r.slot), failed })
+      setSlots(prev => prev.filter(s => !booked.find(r => r.slot.id === s.id)))
+    } else {
+      setMessage('Error: ' + (lastError || 'All bookings failed'))
     }
   }
 
@@ -224,7 +245,7 @@ export default function AdminBook() {
     setSuccess(null)
     setStep(1)
     setSelectedStudent(null)
-    setSelectedSlot(null)
+    setSelectedSlots([])
     setSearchQuery('')
     setGuestFirstName('')
     setGuestLastName('')
@@ -249,15 +270,28 @@ export default function AdminBook() {
 
       {/* Success screen */}
       {success && (
-        <div style={{ ...cardStyle, border: '1px solid #2a8a4e', textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>✅</div>
-          <h3 style={{ color: '#fff', margin: '0 0 0.5rem' }}>Booking Confirmed</h3>
-          <p style={{ color: '#ccc', margin: '0 0 0.25rem' }}><strong style={{ color: '#fff' }}>{success.studentName}</strong></p>
-          <p style={{ color: '#cc0000', margin: '0 0 1.5rem' }}>
-            {formatDate(success.date)} · {formatHour(success.hour)}
-          </p>
-          <p style={{ color: '#666', fontSize: '0.85rem', margin: '0 0 1.5rem' }}>Added to Google Calendar</p>
-          <button onClick={bookAnother} style={{ background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.75rem 2rem', cursor: 'pointer', fontSize: '1rem' }}>
+        <div style={{ ...cardStyle, border: '1px solid #2a8a4e' }}>
+          <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>✅</div>
+            <h3 style={{ color: '#fff', margin: '0 0 0.25rem' }}>{success.booked.length} Lesson{success.booked.length > 1 ? 's' : ''} Booked</h3>
+            <p style={{ color: '#ccc', margin: 0 }}><strong style={{ color: '#fff' }}>{success.studentName}</strong></p>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.25rem' }}>
+            {success.booked.sort((a,b) => a.slot_date.localeCompare(b.slot_date)).map(slot => (
+              <div key={slot.id} style={{ background: '#0a1f0a', border: '1px solid #2a6a2a', borderRadius: '6px', padding: '0.5rem 0.9rem', display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#fff', fontSize: '0.9rem' }}>{formatDate(slot.slot_date)}</span>
+                <span style={{ color: '#cc0000', fontWeight: 'bold', fontSize: '0.9rem' }}>{formatHour(slot.start_hour)}</span>
+              </div>
+            ))}
+            {success.failed.length > 0 && success.failed.map(r => (
+              <div key={r.slot.id} style={{ background: '#1f0a0a', border: '1px solid #6a2a2a', borderRadius: '6px', padding: '0.5rem 0.9rem', display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#aaa', fontSize: '0.9rem' }}>{formatDate(r.slot.slot_date)} {formatHour(r.slot.start_hour)}</span>
+                <span style={{ color: '#cc6666', fontSize: '0.8rem' }}>Failed</span>
+              </div>
+            ))}
+          </div>
+          <p style={{ color: '#666', fontSize: '0.85rem', margin: '0 0 1.25rem', textAlign: 'center' }}>Added to Google Calendar</p>
+          <button onClick={bookAnother} style={{ width: '100%', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.75rem 2rem', cursor: 'pointer', fontSize: '1rem' }}>
             Book Another
           </button>
         </div>
@@ -412,12 +446,19 @@ export default function AdminBook() {
             </div>
           )}
 
-          {/* Step 2: Date + time */}
+          {/* Step 2: Date + time (multi-select) */}
           {step === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ ...cardStyle, background: '#1a1a1a', border: '1px solid #cc0000' }}>
-                <div style={{ color: '#999', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Booking for</div>
-                <div style={{ color: '#fff', fontWeight: 'bold' }}>{clientLabel}</div>
+              <div style={{ ...cardStyle, background: '#1a1a1a', border: '1px solid #cc0000', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ color: '#999', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Booking for</div>
+                  <div style={{ color: '#fff', fontWeight: 'bold' }}>{clientLabel}</div>
+                </div>
+                {selectedSlots.length > 0 && (
+                  <div style={{ background: '#cc0000', color: '#fff', borderRadius: '20px', padding: '0.3rem 0.8rem', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                    {selectedSlots.length} selected
+                  </div>
+                )}
               </div>
 
               <div style={cardStyle}>
@@ -427,7 +468,7 @@ export default function AdminBook() {
                 ) : (
                   <select
                     value={selectedDate}
-                    onChange={e => { setSelectedDate(e.target.value); setSelectedSlot(null) }}
+                    onChange={e => setSelectedDate(e.target.value)}
                     style={inputStyle}
                   >
                     {availableDates.map(d => (
@@ -439,18 +480,21 @@ export default function AdminBook() {
 
               {selectedDate && (
                 <div style={cardStyle}>
-                  <label style={{ ...labelStyle, marginBottom: '0.75rem' }}>Available Times — {formatDateShort(selectedDate)}</label>
+                  <label style={{ ...labelStyle, marginBottom: '0.75rem' }}>
+                    Available Times — {formatDateShort(selectedDate)}
+                    <span style={{ color: '#555', fontWeight: 'normal', marginLeft: '0.5rem', textTransform: 'none', letterSpacing: 0 }}>tap to select multiple</span>
+                  </label>
                   {slotsForDate.length === 0 ? (
                     <p style={{ color: '#666', margin: 0 }}>No slots available on this date.</p>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                       {slotsForDate.map(slot => {
-                        const active = selectedSlot?.id === slot.id
+                        const active = selectedSlots.some(s => s.id === slot.id)
                         const count = slotBookingCounts[slot.id] || 0
                         return (
                           <button
                             key={slot.id}
-                            onClick={() => setSelectedSlot(prev => prev?.id === slot.id ? null : slot)}
+                            onClick={() => toggleSlot(slot)}
                             style={{
                               padding: '0.75rem 0.5rem',
                               borderRadius: '6px',
@@ -461,10 +505,9 @@ export default function AdminBook() {
                               fontSize: '0.9rem',
                               fontWeight: active ? 'bold' : 'normal',
                               transition: 'all 0.15s',
-                              position: 'relative'
                             }}
                           >
-                            {formatHour(slot.start_hour)}
+                            {active ? '✓ ' : ''}{formatHour(slot.start_hour)}
                             {count > 0 && (
                               <span style={{ display: 'block', fontSize: '0.65rem', color: active ? '#ffcca0' : '#e87722', marginTop: '0.15rem' }}>
                                 {count}/2 booked
@@ -478,6 +521,23 @@ export default function AdminBook() {
                 </div>
               )}
 
+              {/* Selected slots summary */}
+              {selectedSlots.length > 0 && (
+                <div style={{ ...cardStyle, background: '#0a1a0a', border: '1px solid #2a4a2a' }}>
+                  <div style={{ color: '#66cc66', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.6rem' }}>
+                    Selected ({selectedSlots.length})
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    {[...selectedSlots].sort((a,b) => a.slot_date.localeCompare(b.slot_date) || a.start_hour - b.start_hour).map(slot => (
+                      <div key={slot.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#ccc', fontSize: '0.85rem' }}>{formatDateShort(slot.slot_date)} · {formatHour(slot.start_hour)}</span>
+                        <button onClick={() => toggleSlot(slot)} style={{ background: 'none', border: 'none', color: '#884444', cursor: 'pointer', fontSize: '1rem', padding: '0 0.25rem' }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {message && <p style={{ color: '#cc0000', margin: 0, fontSize: '0.9rem' }}>{message}</p>}
 
               <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -486,16 +546,16 @@ export default function AdminBook() {
                 </button>
                 <button
                   onClick={goToStep3}
-                  disabled={!selectedSlot}
+                  disabled={selectedSlots.length === 0}
                   style={{
                     flex: 2, padding: '0.875rem', borderRadius: '6px', border: 'none',
-                    background: selectedSlot ? '#cc0000' : '#333',
-                    color: selectedSlot ? '#fff' : '#666',
-                    cursor: selectedSlot ? 'pointer' : 'not-allowed',
+                    background: selectedSlots.length > 0 ? '#cc0000' : '#333',
+                    color: selectedSlots.length > 0 ? '#fff' : '#666',
+                    cursor: selectedSlots.length > 0 ? 'pointer' : 'not-allowed',
                     fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase'
                   }}
                 >
-                  Review Booking
+                  Review {selectedSlots.length > 0 ? `${selectedSlots.length} Booking${selectedSlots.length > 1 ? 's' : ''}` : 'Booking'}
                 </button>
               </div>
             </div>
@@ -505,45 +565,44 @@ export default function AdminBook() {
           {step === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={cardStyle}>
-                <h3 style={{ color: '#fff', margin: '0 0 1.25rem', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Booking Summary</h3>
+                <h3 style={{ color: '#fff', margin: '0 0 1.25rem', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  Booking Summary — {selectedSlots.length} Lesson{selectedSlots.length > 1 ? 's' : ''}
+                </h3>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                     <span style={{ color: '#666', fontSize: '0.85rem' }}>Client</span>
                     <span style={{ color: '#fff', fontWeight: 'bold' }}>{clientLabel}</span>
                   </div>
-                  {isNewClient && guestPhone && (
+                  {(isNewClient ? guestPhone : selectedStudent?.phone) && (
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#666', fontSize: '0.85rem' }}>Phone</span>
-                      <span style={{ color: '#fff' }}>{guestPhone}</span>
-                    </div>
-                  )}
-                  {!isNewClient && selectedStudent?.phone && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#666', fontSize: '0.85rem' }}>Phone</span>
-                      <span style={{ color: '#fff' }}>{selectedStudent.phone}</span>
-                    </div>
-                  )}
-                  <div style={{ borderTop: '1px solid #333', paddingTop: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#666', fontSize: '0.85rem' }}>Date</span>
-                    <span style={{ color: '#fff' }}>{formatDate(selectedSlot.slot_date)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#666', fontSize: '0.85rem' }}>Time</span>
-                    <span style={{ color: '#cc0000', fontWeight: 'bold', fontSize: '1.1rem' }}>{formatHour(selectedSlot.start_hour)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#666', fontSize: '0.85rem' }}>Calendar</span>
-                    <span style={{ color: '#888', fontSize: '0.85rem' }}>Google Calendar ✓</span>
-                  </div>
-                  {isNewClient && (
-                    <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', padding: '0.6rem 0.75rem', marginTop: '0.25rem' }}>
-                      <p style={{ color: '#666', fontSize: '0.8rem', margin: 0 }}>
-                        A new student account will be created for this client. No tokens will be deducted — add tokens from the Students tab if needed.
-                      </p>
+                      <span style={{ color: '#fff' }}>{isNewClient ? guestPhone : selectedStudent.phone}</span>
                     </div>
                   )}
                 </div>
+
+                <div style={{ borderTop: '1px solid #333', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {[...selectedSlots].sort((a,b) => a.slot_date.localeCompare(b.slot_date) || a.start_hour - b.start_hour).map(slot => (
+                    <div key={slot.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid #222' }}>
+                      <span style={{ color: '#ccc', fontSize: '0.9rem' }}>{formatDate(slot.slot_date)}</span>
+                      <span style={{ color: '#cc0000', fontWeight: 'bold' }}>{formatHour(slot.start_hour)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem' }}>
+                  <span style={{ color: '#666', fontSize: '0.85rem' }}>Calendar</span>
+                  <span style={{ color: '#888', fontSize: '0.85rem' }}>Google Calendar ✓</span>
+                </div>
+
+                {isNewClient && (
+                  <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', padding: '0.6rem 0.75rem', marginTop: '0.75rem' }}>
+                    <p style={{ color: '#666', fontSize: '0.8rem', margin: 0 }}>
+                      A new student account will be created for this client. No tokens will be deducted.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {message && <p style={{ color: '#cc0000', margin: 0, fontSize: '0.9rem' }}>{message}</p>}
@@ -563,7 +622,7 @@ export default function AdminBook() {
                     fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase'
                   }}
                 >
-                  {isProcessing ? 'Booking...' : 'Confirm Booking'}
+                  {isProcessing ? `Booking ${selectedSlots.length}...` : `Confirm ${selectedSlots.length} Booking${selectedSlots.length > 1 ? 's' : ''}`}
                 </button>
               </div>
             </div>
