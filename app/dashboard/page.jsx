@@ -132,12 +132,12 @@ export default function Dashboard() {
     return result
   }
 
-  const grouped = groupBookings(upcomingBookings)
   const displayName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : user?.email
 
   const today = new Date().toISOString().split('T')[0]
   const upcomingBookings = bookings.filter(b => b.status === 'confirmed' && b.slots.slot_date >= today)
   const pastBookings = bookings.filter(b => b.slots.slot_date < today).sort((a,b) => b.slots.slot_date.localeCompare(a.slots.slot_date))
+  const grouped = groupBookings(upcomingBookings)
 
   return (
     <main>
