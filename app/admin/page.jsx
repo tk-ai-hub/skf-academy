@@ -27,15 +27,19 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 10)
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function getWeekDates(referenceDate) {
-  const d = new Date(referenceDate)
+  const d = new Date(referenceDate + 'T00:00:00') // parse as local time
   const day = d.getDay()
   const monday = new Date(d)
   monday.setDate(d.getDate() - ((day + 6) % 7))
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday)
     date.setDate(monday.getDate() + i)
-    return date.toISOString().split('T')[0]
+    return localDateStr(date)
   })
 }
 
@@ -273,9 +277,10 @@ export default function Admin() {
     loadData()
   }
   const today = new Date()
+  const todayStr = localDateStr(today)
   const referenceDate = new Date(today)
   referenceDate.setDate(today.getDate() + weekOffset * 7)
-  const weekDates = getWeekDates(referenceDate.toISOString().split('T')[0])
+  const weekDates = getWeekDates(localDateStr(referenceDate))
   const weekStart = weekDates[0]
   const weekEnd = weekDates[6]
   const weekBookings = bookings.filter(b => b.slots?.slot_date >= weekStart && b.slots?.slot_date <= weekEnd)
@@ -336,7 +341,7 @@ export default function Admin() {
           <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.25rem' }}>
             {weekDates.map(date => {
               const dayB = weekBookings.filter(b => b.slots?.slot_date === date)
-              const isToday = date === today.toISOString().split('T')[0]
+              const isToday = date === todayStr
               return (
                 <div key={date} style={{ flex: 1, textAlign: 'center', padding: '0.4rem 0.2rem', background: isToday ? '#3a0000' : '#2a2a2a', border: isToday ? '1px solid #cc0000' : '1px solid #333', borderRadius: '6px' }}>
                   <div style={{ color: '#999', fontSize: '0.7rem', textTransform: 'uppercase' }}>{DAY_NAMES[new Date(date + 'T00:00:00').getDay()]}</div>
@@ -352,7 +357,7 @@ export default function Admin() {
                 <tr>
                   <th style={{ width: '70px', color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #333' }}>Time</th>
                   {weekDates.map(date => {
-                    const isToday = date === today.toISOString().split('T')[0]
+                    const isToday = date === todayStr
                     return (
                       <th key={date} style={{ color: isToday ? '#cc0000' : '#ccc', fontSize: '0.78rem', textTransform: 'uppercase', padding: '0.5rem 0.3rem', textAlign: 'center', borderBottom: '1px solid #333', background: isToday ? '#1a0000' : 'transparent' }}>
                         <div>{DAY_NAMES_FULL[new Date(date + 'T00:00:00').getDay()]}</div>
@@ -369,7 +374,7 @@ export default function Admin() {
                     {weekDates.map(date => {
                       const booking = getBookingForCell(date, hour)
                       const groupClass = getClassForCell(date, hour)
-                      const isToday = date === today.toISOString().split('T')[0]
+                      const isToday = date === todayStr
                       const badge = booking ? attendanceBadge(booking.attendance) : null
                       return (
                         <td key={date} style={{ padding: '0.3rem', borderBottom: '1px solid #1f1f1f', background: isToday ? '#0d0000' : 'transparent', verticalAlign: 'top' }}>
