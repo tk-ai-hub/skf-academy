@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [balance, setBalance] = useState(0)
   const [cancelPrompt, setCancelPrompt] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [activeTab, setActiveTab] = useState('upcoming')
 
   useEffect(() => {
     async function load() {
@@ -33,7 +34,7 @@ export default function Dashboard() {
         .from('bookings')
         .select(`id, status, booked_at, tenant_id, student_id, is_recurring, recurring_group_id, slots!bookings_slot_id_fkey ( id, slot_date, start_hour )`)
         .eq('student_id', user.id)
-        .eq('status', 'confirmed')
+        .in('status', ['confirmed', 'cancelled'])
         .order('booked_at', { ascending: true })
       setBookings((bookingData || []).filter(b => b.slots))
       const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
@@ -131,8 +132,12 @@ export default function Dashboard() {
     return result
   }
 
-  const grouped = groupBookings(bookings)
+  const grouped = groupBookings(upcomingBookings)
   const displayName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : user?.email
+
+  const today = new Date().toISOString().split('T')[0]
+  const upcomingBookings = bookings.filter(b => b.status === 'confirmed' && b.slots.slot_date >= today)
+  const pastBookings = bookings.filter(b => b.slots.slot_date < today).sort((a,b) => b.slots.slot_date.localeCompare(a.slots.slot_date))
 
   return (
     <main>
@@ -198,7 +203,41 @@ export default function Dashboard() {
         </div>
       )}
 
-      <h2 style={{ color: '#fff', borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>Upcoming Lessons</h2>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #333', paddingBottom: '0.75rem' }}>
+        <button onClick={() => setActiveTab('upcoming')} style={{ padding: '0.5rem 1.2rem', background: activeTab === 'upcoming' ? '#cc0000' : 'transparent', color: '#fff', border: activeTab === 'upcoming' ? '1px solid #cc0000' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === 'upcoming' ? 'bold' : 'normal' }}>Upcoming</button>
+        <button onClick={() => setActiveTab('history')} style={{ padding: '0.5rem 1.2rem', background: activeTab === 'history' ? '#cc0000' : 'transparent', color: '#fff', border: activeTab === 'history' ? '1px solid #cc0000' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === 'history' ? 'bold' : 'normal' }}>History</button>
+      </div>
+
+      {activeTab === 'history' && (
+        <div>
+          {pastBookings.length === 0 ? (
+            <p style={{ color: '#666' }}>No past lessons yet.</p>
+          ) : pastBookings.map(b => {
+            const attended = b.attendance === 'attended'
+            const dns = b.attendance === 'dns'
+            const cancelled = b.status === 'cancelled'
+            return (
+              <div key={b.id} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '0.75rem', opacity: cancelled ? 0.6 : 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ margin: 0, color: '#ccc', fontWeight: 'bold' }}>{formatDate(b.slots.slot_date)} at {formatHour(b.slots.start_hour)}</p>
+                    <p style={{ margin: '0.2rem 0 0', color: '#555', fontSize: '0.85rem' }}>Private Lesson</p>
+                  </div>
+                  <div>
+                    {cancelled && <span style={{ background: '#3a1a1a', color: '#cc6666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>Cancelled</span>}
+                    {!cancelled && attended && <span style={{ background: '#1a3a1a', color: '#66cc66', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>✓ Attended</span>}
+                    {!cancelled && dns && <span style={{ background: '#3a1a1a', color: '#cc6666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>✗ DNS</span>}
+                    {!cancelled && !attended && !dns && <span style={{ background: '#2a2a2a', color: '#666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>Completed</span>}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {activeTab === 'upcoming' && (
 
       {grouped.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
@@ -248,6 +287,8 @@ export default function Dashboard() {
             </div>
           )
         })
+      )}
+
       )}
 
       <a href="/book" style={{ display: 'inline-block', marginTop: '1.5rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
