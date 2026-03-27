@@ -242,7 +242,7 @@ export default function Dashboard() {
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.75rem' }}>When to remind me</div>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {[{key:'notification_24h',label:'24 hrs before',val:profile?.notification_24h??true},{key:'notification_2h',label:'2 hrs before',val:profile?.notification_2h??true},{key:'notification_booking_confirm',label:'On booking',val:profile?.notification_booking_confirm??true}].map(({key,label,val})=>(
+              {[{key:'notification_24h',label:'24 hrs before',val:profile?.notification_24h??true},{key:'notification_2h',label:'2 hrs before',val:profile?.notification_2h??true},{key:'notification_48h',label:'48 hrs before',val:profile?.notification_48h??true}].map(({key,label,val})=>(
                 <button key={key} onClick={()=>savePrefs({[key]:!val})} style={{padding:'0.5rem 1rem',background:val?'#cc0000':'#2a2a2a',color:'#fff',border:val?'1px solid #cc0000':'1px solid #444',borderRadius:'6px',cursor:'pointer',fontSize:'0.85rem'}}>{label} {val?'✓':'○'}</button>
               ))}
             </div>
