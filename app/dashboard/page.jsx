@@ -68,25 +68,46 @@ export default function Dashboard() {
       const { data: profileData } = await supabase.from('users').select('first_name, last_name, phone, belt_rank').eq('id', user.id).single()
       setProfile(profileData)
 
-      // Upcoming bookings
+      const todayStr = localDateStr(new Date())
+      const now = new Date()
+
+      // All confirmed/pending bookings
       const { data: bookingData } = await supabase
         .from('bookings')
-        .select(`id, status, booked_at, tenant_id, student_id, is_recurring, recurring_group_id, slots!bookings_slot_id_fkey ( id, slot_date, start_hour )`)
+        .select(`id, status, attendance, booked_at, tenant_id, student_id, is_recurring, recurring_group_id, slots!bookings_slot_id_fkey ( id, slot_date, start_hour )`)
         .eq('student_id', user.id)
         .in('status', ['confirmed', 'pending_token'])
         .order('booked_at', { ascending: true })
-      setBookings((bookingData || []).filter(b => b.slots))
 
-      // History — past confirmed/cancelled bookings with attendance
-      const { data: historyData } = await supabase
+      const allBookings = (bookingData || []).filter(b => b.slots)
+
+      // Split into upcoming (slot time in future) and past (slot time already passed)
+      const upcoming = allBookings.filter(b => {
+        const slotTime = new Date(`${b.slots.slot_date}T${String(b.slots.start_hour).padStart(2, '0')}:00:00`)
+        return slotTime > now
+      })
+      const pastConfirmed = allBookings.filter(b => {
+        const slotTime = new Date(`${b.slots.slot_date}T${String(b.slots.start_hour).padStart(2, '0')}:00:00`)
+        return slotTime <= now
+      })
+      setBookings(upcoming)
+
+      // History — cancelled bookings + past confirmed, sorted newest first
+      const { data: cancelledData } = await supabase
         .from('bookings')
         .select(`id, status, attendance, booked_at, slots!bookings_slot_id_fkey ( slot_date, start_hour )`)
         .eq('student_id', user.id)
-        .in('status', ['confirmed', 'cancelled'])
+        .eq('status', 'cancelled')
         .order('booked_at', { ascending: false })
-      const today = localDateStr(new Date())
-      const past = (historyData || []).filter(b => b.slots && b.slots.slot_date < today)
-      setHistory(past)
+
+      const cancelledPast = (cancelledData || []).filter(b => b.slots && b.slots.slot_date < todayStr)
+      const allHistory = [...pastConfirmed, ...cancelledPast]
+        .sort((a, b) => {
+          const dateA = `${a.slots.slot_date}T${String(a.slots.start_hour).padStart(2, '0')}`
+          const dateB = `${b.slots.slot_date}T${String(b.slots.start_hour).padStart(2, '0')}`
+          return dateB.localeCompare(dateA) // newest first
+        })
+      setHistory(allHistory)
 
       const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
       const total = (tokenData || []).reduce((sum, t) => sum + t.amount, 0)

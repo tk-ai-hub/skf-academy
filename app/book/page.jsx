@@ -28,7 +28,7 @@ const RECURRING_CLASSES = [
 
 function isGroupClass(slotDate, startHour) {
   const dow = new Date(slotDate + 'T00:00:00').getDay()
-  return RECURRING_CLASSES.some(c => c.dayOfWeek === dow && c.hour === startHour)
+  return RECURRING_CLASSES.some(c => c.dayOfWeek === dow && c.hour === Number(startHour))
 }
 
 function isBirthday(dateStr, dob) {
