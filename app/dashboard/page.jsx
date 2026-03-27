@@ -219,7 +219,7 @@ export default function Dashboard() {
               <div key={b.id} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '0.75rem', opacity: cancelled ? 0.6 : 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <p style={{ margin: 0, color: '#ccc', fontWeight: 'bold' }}>{formatDate(b.slots.slot_date)} at {formatHour(b.slots.start_hour)}</p>
+                    <p style={{ margin: 0, color: '#ccc', fontWeight: 'bold' }}>{new Date(b.slots.slot_date + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })} at {formatHour(b.slots.start_hour)}</p>
                     <p style={{ margin: '0.2rem 0 0', color: '#555', fontSize: '0.85rem' }}>Private Lesson</p>
                   </div>
                   <div>
