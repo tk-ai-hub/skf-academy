@@ -14,15 +14,19 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 10)
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function getWeekDates(referenceDate) {
-  const d = new Date(referenceDate)
+  const d = new Date(referenceDate + 'T00:00:00')
   const day = d.getDay()
   const monday = new Date(d)
   monday.setDate(d.getDate() - ((day + 6) % 7))
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday)
     date.setDate(monday.getDate() + i)
-    return date.toISOString().split('T')[0]
+    return localDateStr(date)
   })
 }
 
@@ -245,7 +249,7 @@ export default function Admin() {
   mondayThisWeek.setDate(today.getDate() - ((todayDay + 6) % 7))
   const referenceDate = new Date(mondayThisWeek)
   referenceDate.setDate(mondayThisWeek.getDate() + weekOffset * 7)
-  const weekDates = getWeekDates(referenceDate.toISOString().split('T')[0])
+  const weekDates = getWeekDates(localDateStr(referenceDate))
   const weekStart = weekDates[0]
   const weekEnd = weekDates[6]
   const weekBookings = bookings.filter(b => b.slots?.slot_date >= weekStart && b.slots?.slot_date <= weekEnd)
