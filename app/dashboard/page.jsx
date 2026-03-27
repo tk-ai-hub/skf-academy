@@ -14,6 +14,13 @@ function isWithin24Hours(slotDate, slotHour) {
   return (slotTime - now) < 24 * 60 * 60 * 1000
 }
 
+const BELT_COLORS = { white: '#eee', yellow: '#f5c518', orange: '#e87722', green: '#2d8a4e', blue: '#1a5fa8', brown: '#7b4f2e', black: '#333' }
+
+async function saveNotificationPrefs(userId, prefs) {
+  const { createClient } = await import('@supabase/supabase-js')
+  return null // handled inline
+}
+
 export default function Dashboard() {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -21,20 +28,21 @@ export default function Dashboard() {
   const [balance, setBalance] = useState(0)
   const [cancelPrompt, setCancelPrompt] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [activeTab, setActiveTab] = useState('upcoming')
+  const [showSettings, setShowSettings] = useState(false)
+  const [savingPrefs, setSavingPrefs] = useState(false)
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/login'; return }
       setUser(user)
-      const { data: profileData } = await supabase.from('users').select('first_name, last_name, phone, belt_rank').eq('id', user.id).single()
+      const { data: profileData } = await supabase.from('users').select('first_name, last_name, phone, belt_rank, notification_email, notification_push, notification_24h, notification_2h, notification_booking_confirm').eq('id', user.id).single()
       setProfile(profileData)
       const { data: bookingData } = await supabase
         .from('bookings')
         .select(`id, status, booked_at, tenant_id, student_id, is_recurring, recurring_group_id, slots!bookings_slot_id_fkey ( id, slot_date, start_hour )`)
         .eq('student_id', user.id)
-        .in('status', ['confirmed', 'cancelled'])
+        .eq('status', 'confirmed')
         .order('booked_at', { ascending: true })
       setBookings((bookingData || []).filter(b => b.slots))
       const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
@@ -43,6 +51,13 @@ export default function Dashboard() {
     }
     load()
   }, [])
+
+  async function savePrefs(updates) {
+    setSavingPrefs(true)
+    await supabase.from('users').update(updates).eq('id', (await supabase.auth.getUser()).data.user.id)
+    setProfile(prev => ({ ...prev, ...updates }))
+    setSavingPrefs(false)
+  }
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -132,10 +147,7 @@ export default function Dashboard() {
     return result
   }
 
-  const todayStr = new Date().toISOString().split('T')[0]
-  const upcomingBookings = bookings.filter(b => b.status === 'confirmed' && b.slots.slot_date >= todayStr)
-  const pastBookings = bookings.filter(b => b.slots.slot_date < todayStr).sort((a,b) => b.slots.slot_date.localeCompare(a.slots.slot_date))
-  const grouped = groupBookings(upcomingBookings)
+  const grouped = groupBookings(bookings)
   const displayName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : user?.email
 
   return (
@@ -145,9 +157,18 @@ export default function Dashboard() {
           <div>
             <p style={{ color: '#999', margin: 0 }}>Welcome back,</p>
             <h2 style={{ color: '#fff', margin: '0.25rem 0 0', fontSize: '1.5rem' }}>{displayName}</h2>
+          {profile?.belt_rank && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.4rem' }}>
+              <div style={{ width: '10px', height: '20px', borderRadius: '2px', background: BELT_COLORS[profile.belt_rank] || '#444', border: '1px solid rgba(255,255,255,0.2)' }} />
+              <span style={{ color: '#999', fontSize: '0.8rem', textTransform: 'capitalize', letterSpacing: '1px' }}>{profile.belt_rank} belt</span>
+            </div>
+          )}
             {profile?.belt_rank && <p style={{ color: '#cc0000', fontSize: '0.8rem', letterSpacing: '2px', textTransform: 'uppercase', margin: '0.25rem 0 0' }}>{profile.belt_rank} belt</p>}
           </div>
-          <button onClick={handleLogout} style={{ padding: '0.4rem 0.9rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Sign Out</button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={() => setShowSettings(s => !s)} style={{ padding: '0.4rem 0.9rem', background: showSettings ? '#2a2a2a' : 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>⚙️ Notifications</button>
+            <button onClick={handleLogout} style={{ padding: '0.4rem 0.9rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Sign Out</button>
+          </div>
         </div>
       )}
 
@@ -202,40 +223,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #333', paddingBottom: '0.75rem' }}>
-        <button onClick={() => setActiveTab('upcoming')} style={{ padding: '0.5rem 1.2rem', background: activeTab === 'upcoming' ? '#cc0000' : 'transparent', color: '#fff', border: activeTab === 'upcoming' ? '1px solid #cc0000' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === 'upcoming' ? 'bold' : 'normal' }}>Upcoming</button>
-        <button onClick={() => setActiveTab('history')} style={{ padding: '0.5rem 1.2rem', background: activeTab === 'history' ? '#cc0000' : 'transparent', color: '#fff', border: activeTab === 'history' ? '1px solid #cc0000' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === 'history' ? 'bold' : 'normal' }}>History</button>
-      </div>
+      <h2 style={{ color: '#fff', borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>Upcoming Lessons</h2>
 
-      {activeTab === 'history' && (
-        <div>
-          {pastBookings.length === 0 ? (
-            <p style={{ color: '#666' }}>No past lessons yet.</p>
-          ) : pastBookings.map(b => {
-            const cancelled = b.status === 'cancelled'
-            const attended = b.attendance === 'attended'
-            const dns = b.attendance === 'dns'
-            return (
-              <div key={b.id} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '0.75rem', opacity: cancelled ? 0.6 : 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <p style={{ margin: 0, color: '#ccc', fontWeight: 'bold' }}>{new Date(b.slots.slot_date + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })} at {formatHour(b.slots.start_hour)}</p>
-                    <p style={{ margin: '0.2rem 0 0', color: '#555', fontSize: '0.85rem' }}>Private Lesson</p>
-                  </div>
-                  <div>
-                    {cancelled && <span style={{ background: '#3a1a1a', color: '#cc6666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>Cancelled</span>}
-                    {!cancelled && attended && <span style={{ background: '#1a3a1a', color: '#66cc66', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>✓ Attended</span>}
-                    {!cancelled && dns && <span style={{ background: '#3a1a1a', color: '#cc6666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>✗ DNS</span>}
-                    {!cancelled && !attended && !dns && <span style={{ background: '#2a2a2a', color: '#666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>Completed</span>}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {activeTab === 'upcoming' && (grouped.length === 0 ? (
+      {grouped.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
       ) : (
         grouped.map((group) => {
@@ -283,7 +273,7 @@ export default function Dashboard() {
             </div>
           )
         })
-      ))}
+      )}
 
       <a href="/book" style={{ display: 'inline-block', marginTop: '1.5rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
         + Book a Lesson
