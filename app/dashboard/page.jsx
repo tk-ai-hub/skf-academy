@@ -228,6 +228,29 @@ export default function Dashboard() {
         </div>
       )}
 
+      {showSettings && (
+        <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '10px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+          <h3 style={{ color: '#fff', margin: '0 0 1.25rem', fontSize: '1rem', letterSpacing: '1px', textTransform: 'uppercase' }}>⚙️ Notification Preferences</h3>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <div style={{ color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.75rem' }}>How to notify me</div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {[{key:'notification_email',label:'📧 Email',val:profile?.notification_email??true},{key:'notification_push',label:'🔔 Push',val:profile?.notification_push??true}].map(({key,label,val})=>(
+                <button key={key} onClick={()=>savePrefs({[key]:!val})} style={{padding:'0.5rem 1rem',background:val?'#cc0000':'#2a2a2a',color:'#fff',border:val?'1px solid #cc0000':'1px solid #444',borderRadius:'6px',cursor:'pointer',fontSize:'0.85rem'}}>{label} {val?'On':'Off'}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.75rem' }}>When to remind me</div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {[{key:'notification_24h',label:'24 hrs before',val:profile?.notification_24h??true},{key:'notification_2h',label:'2 hrs before',val:profile?.notification_2h??true},{key:'notification_booking_confirm',label:'On booking',val:profile?.notification_booking_confirm??true}].map(({key,label,val})=>(
+                <button key={key} onClick={()=>savePrefs({[key]:!val})} style={{padding:'0.5rem 1rem',background:val?'#cc0000':'#2a2a2a',color:'#fff',border:val?'1px solid #cc0000':'1px solid #444',borderRadius:'6px',cursor:'pointer',fontSize:'0.85rem'}}>{label} {val?'✓':'○'}</button>
+              ))}
+            </div>
+          </div>
+          {savingPrefs&&<p style={{color:'#666',fontSize:'0.8rem',margin:0}}>Saving...</p>}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #333', paddingBottom: '0.75rem' }}>
         <button onClick={() => setActiveTab('upcoming')} style={{ padding: '0.5rem 1.2rem', background: activeTab === 'upcoming' ? 'var(--red)' : 'transparent', color: '#fff', border: activeTab === 'upcoming' ? '1px solid var(--red)' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === 'upcoming' ? 'bold' : 'normal' }}>Upcoming</button>
         <button onClick={() => setActiveTab('history')} style={{ padding: '0.5rem 1.2rem', background: activeTab === 'history' ? 'var(--red)' : 'transparent', color: '#fff', border: activeTab === 'history' ? '1px solid var(--red)' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === 'history' ? 'bold' : 'normal' }}>History</button>
