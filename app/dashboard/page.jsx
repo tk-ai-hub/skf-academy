@@ -237,7 +237,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {activeTab === 'upcoming' && (
+      {activeTab === 'upcoming' && (<>
 
       {grouped.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
@@ -289,7 +289,7 @@ export default function Dashboard() {
         })
       )}
 
-      )}
+      </> )}
 
       <a href="/book" style={{ display: 'inline-block', marginTop: '1.5rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
         + Book a Lesson
