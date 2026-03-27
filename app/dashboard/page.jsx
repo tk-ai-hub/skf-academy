@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [savingPrefs, setSavingPrefs] = useState(false)
+  const [activeTab, setActiveTab] = useState('upcoming')
 
   useEffect(() => {
     async function load() {
@@ -42,7 +43,7 @@ export default function Dashboard() {
         .from('bookings')
         .select(`id, status, booked_at, tenant_id, student_id, is_recurring, recurring_group_id, slots!bookings_slot_id_fkey ( id, slot_date, start_hour )`)
         .eq('student_id', user.id)
-        .eq('status', 'confirmed')
+        .in('status', ['confirmed', 'cancelled'])
         .order('booked_at', { ascending: true })
       setBookings((bookingData || []).filter(b => b.slots))
       const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
@@ -147,8 +148,12 @@ export default function Dashboard() {
     return result
   }
 
-  const grouped = groupBookings(bookings)
   const displayName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : user?.email
+
+  const todayStr = new Date().toISOString().split('T')[0]
+  const upcomingBookings = bookings.filter(b => b.status === 'confirmed' && b.slots?.slot_date >= todayStr)
+  const pastBookings = bookings.filter(b => b.slots?.slot_date < todayStr).sort((a,b) => b.slots.slot_date.localeCompare(a.slots.slot_date))
+  const grouped = groupBookings(upcomingBookings)
 
   return (
     <main>
@@ -223,9 +228,44 @@ export default function Dashboard() {
         </div>
       )}
 
-      <h2 style={{ color: '#fff', borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>Upcoming Lessons</h2>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #333', paddingBottom: '0.75rem' }}>
+        <button onClick={() => setActiveTab('upcoming')} style={{ padding: '0.5rem 1.2rem', background: activeTab === 'upcoming' ? 'var(--red)' : 'transparent', color: '#fff', border: activeTab === 'upcoming' ? '1px solid var(--red)' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === 'upcoming' ? 'bold' : 'normal' }}>Upcoming</button>
+        <button onClick={() => setActiveTab('history')} style={{ padding: '0.5rem 1.2rem', background: activeTab === 'history' ? 'var(--red)' : 'transparent', color: '#fff', border: activeTab === 'history' ? '1px solid var(--red)' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === 'history' ? 'bold' : 'normal' }}>History</button>
+      </div>
 
-      {grouped.length === 0 ? (
+      {activeTab === 'history' && (
+        <div>
+          {pastBookings.length === 0 ? (
+            <p style={{ color: '#666' }}>No past lessons yet.</p>
+          ) : pastBookings.map(b => {
+            const cancelled = b.status === 'cancelled'
+            const attended = b.attendance === 'attended'
+            const dns = b.attendance === 'dns'
+            const d = b.slots.slot_date
+            const h = b.slots.start_hour
+            const timeStr = h < 12 ? h + ':00 AM' : h === 12 ? '12:00 PM' : (h-12) + ':00 PM'
+            const dateStr = new Date(d + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })
+            return (
+              <div key={b.id} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '0.75rem', opacity: cancelled ? 0.6 : 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ margin: 0, color: '#ccc', fontWeight: 'bold' }}>{dateStr} at {timeStr}</p>
+                    <p style={{ margin: '0.2rem 0 0', color: '#555', fontSize: '0.85rem' }}>Private Lesson</p>
+                  </div>
+                  {cancelled && <span style={{ background: '#3a1a1a', color: '#cc6666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0 }}>Cancelled</span>}
+                  {!cancelled && attended && <span style={{ background: '#1a3a1a', color: '#66cc66', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0 }}>✓ Attended</span>}
+                  {!cancelled && dns && <span style={{ background: '#3a1a1a', color: '#cc6666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0 }}>✗ DNS</span>}
+                  {!cancelled && !attended && !dns && <span style={{ background: '#2a2a2a', color: '#666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0 }}>Completed</span>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {activeTab === 'upcoming' && (<>
+
+      {upcomingBookings.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
       ) : (
         grouped.map((group) => {
@@ -274,6 +314,8 @@ export default function Dashboard() {
           )
         })
       )}
+
+      </> )}
 
       <a href="/book" style={{ display: 'inline-block', marginTop: '1.5rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
         + Book a Lesson
