@@ -90,6 +90,14 @@ export default function Admin() {
   const [emailBody, setEmailBody] = useState('')
   const [emailSending, setEmailSending] = useState(false)
   const [showEmailCompose, setShowEmailCompose] = useState(false)
+  const [showBookModal, setShowBookModal] = useState(false)
+  const [bookType, setBookType] = useState('student') // 'student' | 'guest'
+  const [bookStudentId, setBookStudentId] = useState('')
+  const [bookGuestName, setBookGuestName] = useState('')
+  const [bookGuestPhone, setBookGuestPhone] = useState('')
+  const [bookDate, setBookDate] = useState('')
+  const [bookHour, setBookHour] = useState(10)
+  const [bookingInProgress, setBookingInProgress] = useState(false)
 
   // Admin route protection
   useEffect(() => {
@@ -209,6 +217,48 @@ export default function Admin() {
 
   function toggleStudentSelect(id) { setSelectedStudentIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]) }
 
+  async function adminBook() {
+    if (!bookDate) { setMessage('Please select a date.'); return }
+    setBookingInProgress(true)
+    try {
+      const { data: tenant } = await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()
+      
+      if (bookType === 'guest') {
+        // Block the slot and add a note
+        await supabase.from('slots').update({
+          is_blocked: true,
+          block_reason: `Guest: ${bookGuestName}${bookGuestPhone ? ' (' + bookGuestPhone + ')' : ''}`
+        }).eq('slot_date', bookDate).eq('start_hour', bookHour)
+        setMessage(`✅ Slot booked for guest ${bookGuestName} on ${bookDate} at ${formatHour(bookHour)}`)
+      } else {
+        // Book for existing student
+        const { data: slot } = await supabase.from('slots').select('id').eq('slot_date', bookDate).eq('start_hour', bookHour).eq('is_blocked', false).single()
+        if (!slot) { setMessage('That slot is not available.'); setBookingInProgress(false); return }
+        await supabase.from('bookings').insert({
+          tenant_id: tenant.id,
+          student_id: bookStudentId,
+          slot_id: slot.id,
+          status: 'confirmed',
+          booked_at: new Date().toISOString()
+        })
+        // Deduct token
+        await supabase.from('tokens').insert({
+          tenant_id: tenant.id,
+          student_id: bookStudentId,
+          amount: -1,
+          reason: 'booked by admin'
+        })
+        setMessage(`✅ Lesson booked for ${sName(students.find(s => s.id === bookStudentId))} on ${bookDate} at ${formatHour(bookHour)}`)
+      }
+      setShowBookModal(false)
+      setBookDate(''); setBookGuestName(''); setBookGuestPhone(''); setBookStudentId('')
+      loadData()
+    } catch (err) {
+      setMessage('Booking failed: ' + err.message)
+    }
+    setBookingInProgress(false)
+  }
+
   async function blockDates() {
     if (!blockStart || !blockEnd) { setMessage('Please select a start and end date.'); return }
     const { data: tenant } = await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()
@@ -287,7 +337,7 @@ export default function Admin() {
   }
 
   return (
-    <main style={{ fontFamily: 'sans-serif', maxWidth: '900px', margin: '0 auto' }}>
+    <main style={{ fontFamily: 'sans-serif', maxWidth: '100%', margin: '0 auto', padding: '0 1rem', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #cc0000', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
         <h1 style={{ color: '#fff', margin: 0 }}>SKF Academy — Admin</h1>
         <button onClick={handleLogout} style={{ padding: '0.4rem 0.9rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Sign Out</button>
@@ -295,12 +345,63 @@ export default function Admin() {
 
       {message && <p style={{ background: '#1a3a1a', border: '1px solid #2a6a2a', padding: '0.75rem', borderRadius: '6px', color: '#66cc66' }}>{message}</p>}
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <button style={tabStyle('week')} onClick={() => setActiveTab('week')}>📅 Week View</button>
         <button style={tabStyle('bookings')} onClick={() => setActiveTab('bookings')}>📋 All Bookings</button>
         <button style={tabStyle('students')} onClick={() => setActiveTab('students')}>👥 Students</button>
         <button style={tabStyle('block')} onClick={() => setActiveTab('block')}>🔒 Block Dates</button>
+      <button onClick={() => setShowBookModal(true)} style={{ padding: '0.5rem 1.1rem', background: '#cc0000', color: '#fff', border: '1px solid #cc0000', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '0.5px', marginLeft: 'auto' }}>+ Book a Lesson</button>
       </div>
+
+      {/* Book a Lesson Modal */}
+      {showBookModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: '#1a1a1a', border: '1px solid #cc0000', borderRadius: '12px', padding: '1.75rem', maxWidth: '420px', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ color: '#fff', margin: 0 }}>+ Book a Lesson</h3>
+              <button onClick={() => setShowBookModal(false)} style={{ background: 'transparent', border: 'none', color: '#666', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+            </div>
+            {/* Booking type */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+              <button onClick={() => setBookType('student')} style={{ flex: 1, padding: '0.5rem', background: bookType === 'student' ? '#cc0000' : '#2a2a2a', color: '#fff', border: bookType === 'student' ? '1px solid #cc0000' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>Registered Student</button>
+              <button onClick={() => setBookType('guest')} style={{ flex: 1, padding: '0.5rem', background: bookType === 'guest' ? '#cc0000' : '#2a2a2a', color: '#fff', border: bookType === 'guest' ? '1px solid #cc0000' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>Guest / Trial</button>
+            </div>
+            {/* Student or guest fields */}
+            {bookType === 'student' ? (
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', color: '#999', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.4rem' }}>Student</label>
+                <select value={bookStudentId} onChange={e => setBookStudentId(e.target.value)} style={{ width: '100%', padding: '0.6rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }}>
+                  <option value="">Select student...</option>
+                  {students.map(s => <option key={s.id} value={s.id}>{sName(s)}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', color: '#999', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.4rem' }}>Guest Name</label>
+                <input value={bookGuestName} onChange={e => setBookGuestName(e.target.value)} placeholder="Full name" style={{ width: '100%', padding: '0.6rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', marginBottom: '0.5rem', boxSizing: 'border-box' }} />
+                <label style={{ display: 'block', color: '#999', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.4rem' }}>Phone (optional)</label>
+                <input value={bookGuestPhone} onChange={e => setBookGuestPhone(e.target.value)} placeholder="Phone number" style={{ width: '100%', padding: '0.6rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', boxSizing: 'border-box' }} />
+              </div>
+            )}
+            {/* Date & Time */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div>
+                <label style={{ display: 'block', color: '#999', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.4rem' }}>Date</label>
+                <input type="date" value={bookDate} onChange={e => setBookDate(e.target.value)} style={{ width: '100%', padding: '0.6rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', colorScheme: 'dark', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#999', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.4rem' }}>Time</label>
+                <select value={bookHour} onChange={e => setBookHour(Number(e.target.value))} style={{ width: '100%', padding: '0.6rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }}>
+                  {HOURS.map(h => <option key={h} value={h}>{formatHour(h)}</option>)}
+                </select>
+              </div>
+            </div>
+            <button onClick={adminBook} disabled={bookingInProgress} style={{ width: '100%', padding: '0.85rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
+              {bookingInProgress ? 'Booking...' : bookType === 'guest' ? 'Book Guest Slot' : 'Book Lesson'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── WEEK VIEW ── */}
       {activeTab === 'week' && (
