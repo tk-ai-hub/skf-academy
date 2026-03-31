@@ -83,32 +83,23 @@ export default function Dashboard() {
     setIsProcessing(true)
     setCancelPrompt(null)
     try {
-      const studentName = profile?.first_name ? `${profile.last_name || ''} ${profile.first_name}`.trim() : user.email
+      const res = await fetch('/api/cancel-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, cancelSeries: !!cancelSeries })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Cancel failed')
 
+      // Update UI
       if (cancelSeries && booking.recurring_group_id) {
-        const seriesBookings = bookings.filter(b => b.recurring_group_id === booking.recurring_group_id)
-        let refunded = 0
-        for (const b of seriesBookings) {
-          const within24 = isWithin24Hours(b.slots.slot_date, b.slots.start_hour)
-          await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_within_24h: within24 }).eq('id', b.id)
-          if (!within24) {
-            await supabase.from('tokens').insert({ tenant_id: b.tenant_id, student_id: b.student_id, amount: 1, reason: 'recurring series cancelled - refund', booking_id: b.id })
-            refunded++
-          }
-          await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cancellation', studentEmail: user.email, studentName, phone: profile?.phone || '', date: b.slots.slot_date, time: formatHour(b.slots.start_hour), hour: b.slots.start_hour }) })
-        }
         setBookings(prev => prev.filter(b => b.recurring_group_id !== booking.recurring_group_id))
-        setBalance(prev => prev + refunded)
       } else {
-        const within24 = isWithin24Hours(booking.slots.slot_date, booking.slots.start_hour)
-        await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_within_24h: within24 }).eq('id', booking.id)
-        if (!within24) {
-          await supabase.from('tokens').insert({ tenant_id: booking.tenant_id, student_id: booking.student_id, amount: 1, reason: 'lesson cancelled - refund', booking_id: booking.id })
-          setBalance(prev => prev + 1)
-        }
-        await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cancellation', studentEmail: user.email, studentName, phone: profile?.phone || '', date: booking.slots.slot_date, time: formatHour(booking.slots.start_hour), hour: booking.slots.start_hour }) })
         setBookings(prev => prev.filter(b => b.id !== booking.id))
       }
+      if (data.refunded > 0) setBalance(prev => prev + data.refunded)
+    } catch (err) {
+      alert('Cancel failed: ' + err.message)
     } finally {
       setIsProcessing(false)
     }
