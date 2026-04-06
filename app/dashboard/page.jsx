@@ -111,7 +111,7 @@ export default function Dashboard() {
     setIsProcessing(true)
     try {
       const studentName = profile?.first_name ? `${profile.last_name || ''} ${profile.first_name}`.trim() : user.email
-      await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_within_24h: within24 }).eq('id', booking.id)
+      await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString() }).eq('id', booking.id)
       if (!within24) {
         await supabase.from('tokens').insert({ tenant_id: booking.tenant_id, student_id: booking.student_id, amount: 1, reason: 'lesson rescheduled - refund', booking_id: booking.id })
       }
