@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
+const resend = new Resend(process.env.RESEND_API_KEY)
 import { google } from 'googleapis'
 
 async function getCalendarClient() {
@@ -110,6 +112,27 @@ export async function POST(request) {
 
   // Add to Google Calendar
   await addToGoogleCalendar(slot.slot_date, slot.start_hour, studentName, studentPhone || 'No phone')
+
+  // Deduct token if registered student (not guest)
+  if (studentId) {
+    await supabaseAdmin.from('tokens').insert({ tenant_id: slot.tenant_id, student_id: userId, amount: -1, reason: 'lesson booked by admin', booking_id: booking.id })
+  }
+
+  // Send confirmation email to student
+  try {
+    const { data: profile } = await supabaseAdmin.from('users').select('email,first_name').eq('id', userId).single()
+    if (profile?.email && !profile.email.includes('@skf-academy.internal')) {
+      const h = slot.start_hour
+      const timeStr = h < 12 ? h+':00 AM' : h === 12 ? '12:00 PM' : (h-12)+':00 PM'
+      const ds = new Date(slot.slot_date+'T00:00:00').toLocaleDateString('en-CA', { weekday:'long', month:'long', day:'numeric' })
+      await resend.emails.send({
+        from: 'SKF Academy <noreply@kungfubc.com>',
+        to: profile.email,
+        subject: 'Your lesson has been booked',
+        html: '<div style="font-family:sans-serif;background:#111;color:#fff;padding:2rem;border-radius:8px;max-width:500px"><h2 style="color:#cc0000">Lesson Booked</h2><p>Hi '+(profile.first_name||'there')+',</p><p>A lesson has been booked for you on <strong>'+ds+' at '+timeStr+'</strong>.</p><a href="https://app.kungfubc.com/dashboard" style="display:inline-block;margin-top:1rem;padding:0.75rem 1.5rem;background:#cc0000;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold">View Dashboard</a></div>'
+      })
+    }
+  } catch(emailErr) { console.error('Email error:', emailErr.message) }
 
   return Response.json({ success: true, booking, studentName, studentId: userId })
 }
