@@ -175,7 +175,7 @@ export default function Admin() {
 
   async function cancelBooking(booking) {
     const within24 = isWithin24Hours(booking.slots?.slot_date, booking.slots?.start_hour)
-    await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin', cancelled_within_24h: within24 }).eq('id', booking.id)
+    await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin' }).eq('id', booking.id)
     // Remove from local state immediately so calendar updates right away
     setBookings(prev => prev.filter(b => b.id !== booking.id))
     // Only refund if NOT within 24 hours
