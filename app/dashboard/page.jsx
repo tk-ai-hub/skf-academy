@@ -8,120 +8,132 @@ function formatHour(h) {
   return `${h - 12}:00 PM`
 }
 
-function isWithin24Hours(slotDate, slotHour) {
-  const slotTime = new Date(`${slotDate}T${String(slotHour).padStart(2, '0')}:00:00`)
-  const now = new Date()
-  return (slotTime - now) < 24 * 60 * 60 * 1000
-}
-
-const BELT_COLORS = { white: '#eee', yellow: '#f5c518', orange: '#e87722', green: '#2d8a4e', blue: '#1a5fa8', brown: '#7b4f2e', black: '#333' }
-
-async function saveNotificationPrefs(userId, prefs) {
-  const { createClient } = await import('@supabase/supabase-js')
-  return null // handled inline
-}
-
 export default function Dashboard() {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [bookings, setBookings] = useState([])
   const [balance, setBalance] = useState(0)
-  const [cancelPrompt, setCancelPrompt] = useState(null)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [savingPrefs, setSavingPrefs] = useState(false)
-  const [activeTab, setActiveTab] = useState('upcoming')
+  const [cancelPrompt, setCancelPrompt] = useState(null) // { booking, isRecurring }
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/login'; return }
       setUser(user)
-      const { data: profileData } = await supabase.from('users').select('first_name, last_name, phone, belt_rank, notification_email, notification_push, notification_24h, notification_2h, notification_booking_confirm').eq('id', user.id).single()
+
+      const { data: profileData } = await supabase
+        .from('users')
+        .select('first_name, last_name, phone, belt_rank')
+        .eq('id', user.id)
+        .single()
       setProfile(profileData)
+
       const { data: bookingData } = await supabase
         .from('bookings')
-        .select(`id, status, booked_at, tenant_id, student_id, is_recurring, recurring_group_id, slots!bookings_slot_id_fkey ( id, slot_date, start_hour )`)
+        .select(`
+          id, status, booked_at, tenant_id, student_id, is_recurring, recurring_group_id,
+          slots!bookings_slot_id_fkey ( id, slot_date, start_hour )
+        `)
         .eq('student_id', user.id)
-        .in('status', ['confirmed', 'cancelled'])
+        .eq('status', 'confirmed')
         .order('booked_at', { ascending: true })
       setBookings((bookingData || []).filter(b => b.slots))
-      const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
+
+      const { data: tokenData } = await supabase
+        .from('tokens')
+        .select('amount')
+        .eq('student_id', user.id)
       const total = (tokenData || []).reduce((sum, t) => sum + t.amount, 0)
       setBalance(total)
     }
     load()
   }, [])
 
-  async function savePrefs(updates) {
-    setSavingPrefs(true)
-    await supabase.from('users').update(updates).eq('id', (await supabase.auth.getUser()).data.user.id)
-    setProfile(prev => ({ ...prev, ...updates }))
-    setSavingPrefs(false)
-  }
-
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    window.location.href = '/login'
-  }
-
   function handleCancelClick(booking) {
-    if (isProcessing) return
-    const within24 = isWithin24Hours(booking.slots.slot_date, booking.slots.start_hour)
     if (booking.is_recurring && booking.recurring_group_id) {
-      const seriesBookings = bookings.filter(b => b.recurring_group_id === booking.recurring_group_id && b.id !== booking.id)
+      // Check if there are other bookings in the same recurring group
+      const seriesBookings = bookings.filter(
+        b => b.recurring_group_id === booking.recurring_group_id && b.id !== booking.id
+      )
       if (seriesBookings.length > 0) {
-        setCancelPrompt({ booking, hasSeries: true, seriesCount: seriesBookings.length + 1, within24 })
+        setCancelPrompt({ booking, hasSeries: true, seriesCount: seriesBookings.length + 1 })
         return
       }
     }
-    setCancelPrompt({ booking, hasSeries: false, within24 })
+    // Single or last in series — just cancel directly
+    doCancel(booking, false)
   }
 
   async function doCancel(booking, cancelSeries) {
-    if (isProcessing) return
-    setIsProcessing(true)
     setCancelPrompt(null)
-    try {
-      const res = await fetch('/api/cancel-booking', {
+    const studentName = profile?.first_name
+      ? `${profile.last_name || ''} ${profile.first_name}`.trim()
+      : user.email
+
+    if (cancelSeries && booking.recurring_group_id) {
+      // Cancel all future bookings in this recurring group
+      const seriesBookings = bookings.filter(
+        b => b.recurring_group_id === booking.recurring_group_id
+      )
+      for (const b of seriesBookings) {
+        await supabase.from('bookings')
+          .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+          .eq('id', b.id)
+        await supabase.from('tokens').insert({
+          tenant_id: b.tenant_id,
+          student_id: b.student_id,
+          amount: 1,
+          reason: 'recurring series cancelled - refund',
+          booking_id: b.id
+        })
+        await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'cancellation',
+            studentEmail: user.email,
+            studentName,
+            phone: profile?.phone || '',
+            date: b.slots.slot_date,
+            time: formatHour(b.slots.start_hour),
+            hour: b.slots.start_hour
+          })
+        })
+      }
+      const refundAmount = seriesBookings.length
+      setBookings(prev => prev.filter(b => b.recurring_group_id !== booking.recurring_group_id))
+      setBalance(prev => prev + refundAmount)
+    } else {
+      // Cancel single occurrence
+      await supabase.from('bookings')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('id', booking.id)
+      await supabase.from('tokens').insert({
+        tenant_id: booking.tenant_id,
+        student_id: booking.student_id,
+        amount: 1,
+        reason: 'lesson cancelled - refund',
+        booking_id: booking.id
+      })
+      await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId: booking.id, cancelSeries: !!cancelSeries })
+        body: JSON.stringify({
+          type: 'cancellation',
+          studentEmail: user.email,
+          studentName,
+          phone: profile?.phone || '',
+          date: booking.slots.slot_date,
+          time: formatHour(booking.slots.start_hour),
+          hour: booking.slots.start_hour
+        })
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Cancel failed')
-
-      // Update UI
-      if (cancelSeries && booking.recurring_group_id) {
-        setBookings(prev => prev.filter(b => b.recurring_group_id !== booking.recurring_group_id))
-      } else {
-        setBookings(prev => prev.filter(b => b.id !== booking.id))
-      }
-      if (data.refunded > 0) setBalance(prev => prev + data.refunded)
-    } catch (err) {
-      alert('Cancel failed: ' + err.message)
-    } finally {
-      setIsProcessing(false)
+      setBookings(prev => prev.filter(b => b.id !== booking.id))
+      setBalance(prev => prev + 1)
     }
   }
 
-  async function handleReschedule(booking) {
-    if (isProcessing) return
-    const within24 = isWithin24Hours(booking.slots.slot_date, booking.slots.start_hour)
-    setIsProcessing(true)
-    try {
-      const studentName = profile?.first_name ? `${profile.last_name || ''} ${profile.first_name}`.trim() : user.email
-      await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString() }).eq('id', booking.id)
-      if (!within24) {
-        await supabase.from('tokens').insert({ tenant_id: booking.tenant_id, student_id: booking.student_id, amount: 1, reason: 'lesson rescheduled - refund', booking_id: booking.id })
-      }
-      await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cancellation', studentEmail: user.email, studentName, phone: profile?.phone || '', date: booking.slots.slot_date, time: formatHour(booking.slots.start_hour), hour: booking.slots.start_hour }) })
-      window.location.href = '/book'
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
+  // Group bookings: show recurring series grouped with a header
   function groupBookings(bookings) {
     const seen = new Set()
     const result = []
@@ -139,197 +151,140 @@ export default function Dashboard() {
     return result
   }
 
-  const displayName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : user?.email
-
-  const todayStr = new Date().toISOString().split('T')[0]
-  const upcomingBookings = bookings.filter(b => b.status === 'confirmed' && b.slots?.slot_date >= todayStr)
-  const pastBookings = bookings.filter(b => b.slots?.slot_date < todayStr).sort((a,b) => b.slots.slot_date.localeCompare(a.slots.slot_date))
-  const grouped = groupBookings(upcomingBookings)
+  const grouped = groupBookings(bookings)
+  const displayName = profile?.first_name
+    ? `${profile.first_name} ${profile.last_name || ''}`.trim()
+    : user?.email
 
   return (
     <main>
+      {/* Welcome */}
       {user && (
-        <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <p style={{ color: '#999', margin: 0 }}>Welcome back,</p>
-            <h2 style={{ color: '#fff', margin: '0.25rem 0 0', fontSize: '1.5rem' }}>{displayName}</h2>
+        <div style={{ marginBottom: '1.5rem' }}>
+          <p style={{ color: '#999', margin: 0 }}>Welcome back,</p>
+          <h2 style={{ color: '#fff', margin: '0.25rem 0 0', fontSize: '1.5rem' }}>{displayName}</h2>
           {profile?.belt_rank && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.4rem' }}>
-              <div style={{ width: '10px', height: '20px', borderRadius: '2px', background: BELT_COLORS[profile.belt_rank] || '#444', border: '1px solid rgba(255,255,255,0.2)' }} />
-              <span style={{ color: '#999', fontSize: '0.8rem', textTransform: 'capitalize', letterSpacing: '1px' }}>{profile.belt_rank} belt</span>
-            </div>
+            <p style={{ color: '#cc0000', fontSize: '0.8rem', letterSpacing: '2px', textTransform: 'uppercase', margin: '0.25rem 0 0' }}>
+              {profile.belt_rank} belt
+            </p>
           )}
-            {profile?.belt_rank && <p style={{ color: '#cc0000', fontSize: '0.8rem', letterSpacing: '2px', textTransform: 'uppercase', margin: '0.25rem 0 0' }}>{profile.belt_rank} belt</p>}
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={() => setShowSettings(s => !s)} style={{ padding: '0.4rem 0.9rem', background: showSettings ? '#2a2a2a' : 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>⚙️ Notifications</button>
-            <button onClick={handleLogout} style={{ padding: '0.4rem 0.9rem', background: 'transparent', color: '#666', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Sign Out</button>
-          </div>
         </div>
       )}
 
+      {/* Token Balance */}
       <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', padding: '1rem 1.5rem', borderRadius: '8px', marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <div style={{ color: '#cc0000', fontSize: '0.75rem', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Lesson Tokens</div>
           <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#fff' }}>{balance}</div>
         </div>
-        <div style={{ color: '#666', fontSize: '0.85rem', textAlign: 'right' }}>Renew monthly<br /><span style={{ color: '#cc0000' }}>4 tokens/month</span></div>
+        <div style={{ color: '#666', fontSize: '0.85rem', textAlign: 'right' }}>
+          Renew monthly<br />
+          <span style={{ color: '#cc0000' }}>4 tokens/month</span>
+        </div>
       </div>
 
       {/* Cancel Prompt Modal */}
       {cancelPrompt && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: '#1a1a1a', border: '1px solid #cc0000', borderRadius: '12px', padding: '1.75rem', maxWidth: '400px', width: '100%' }}>
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+        }}>
+          <div style={{ background: '#1a1a1a', border: '1px solid #cc0000', borderRadius: '12px', padding: '1.75rem', maxWidth: '380px', width: '100%' }}>
             <h3 style={{ color: '#fff', margin: '0 0 0.5rem', fontSize: '1.1rem' }}>Cancel Booking</h3>
-            {cancelPrompt.within24 && (
-              <div style={{ background: '#2a1500', border: '1px solid #aa6600', borderRadius: '6px', padding: '0.75rem', marginBottom: '1rem' }}>
-                <p style={{ margin: 0, color: '#ffaa44', fontSize: '0.85rem' }}>⚠️ This lesson is within 24 hours. Your token will <strong>not</strong> be refunded.</p>
-              </div>
-            )}
-            {cancelPrompt.hasSeries ? (
-              <>
-                <p style={{ color: '#999', fontSize: '0.9rem', marginBottom: '1.25rem' }}>This is part of a recurring series ({cancelPrompt.seriesCount} lessons). What would you like to cancel?</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <button onClick={() => doCancel(cancelPrompt.booking, false)} disabled={isProcessing} style={{ padding: '0.75rem', background: '#2a2a2a', color: '#fff', border: '1px solid #444', borderRadius: '8px', cursor: 'pointer', textAlign: 'left' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>This lesson only</div>
-                    <div style={{ color: '#666', fontSize: '0.8rem' }}>{cancelPrompt.within24 ? 'No refund — within 24 hours' : 'Refund 1 token'}</div>
-                  </button>
-                  <button onClick={() => doCancel(cancelPrompt.booking, true)} disabled={isProcessing} style={{ padding: '0.75rem', background: '#2a0000', color: '#fff', border: '1px solid #cc0000', borderRadius: '8px', cursor: 'pointer', textAlign: 'left' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>All {cancelPrompt.seriesCount} lessons</div>
-                    <div style={{ color: '#cc6666', fontSize: '0.8rem' }}>Tokens refunded for lessons outside 24hr window</div>
-                  </button>
-                  <button onClick={() => setCancelPrompt(null)} style={{ padding: '0.6rem', background: 'transparent', color: '#666', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer' }}>Keep my booking</button>
+            <p style={{ color: '#999', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+              This is part of a recurring series ({cancelPrompt.seriesCount} lessons). What would you like to cancel?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <button
+                onClick={() => doCancel(cancelPrompt.booking, false)}
+                style={{ padding: '0.75rem', background: '#2a2a2a', color: '#fff', border: '1px solid #444', borderRadius: '8px', cursor: 'pointer', textAlign: 'left' }}
+              >
+                <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>This lesson only</div>
+                <div style={{ color: '#666', fontSize: '0.8rem' }}>
+                  Cancel {cancelPrompt.booking.slots.slot_date} at {formatHour(cancelPrompt.booking.slots.start_hour)} — refund 1 token
                 </div>
-              </>
-            ) : (
-              <>
-                <p style={{ color: '#999', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
-                  Cancel {cancelPrompt.booking.slots.slot_date} at {formatHour(cancelPrompt.booking.slots.start_hour)}?
-                  {cancelPrompt.within24 ? ' No token refund.' : ' 1 token will be refunded.'}
-                </p>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button onClick={() => doCancel(cancelPrompt.booking, false)} disabled={isProcessing} style={{ flex: 1, padding: '0.75rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-                    {isProcessing ? 'Cancelling...' : 'Yes, Cancel'}
-                  </button>
-                  <button onClick={() => setCancelPrompt(null)} style={{ flex: 1, padding: '0.75rem', background: 'transparent', color: '#666', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer' }}>Keep it</button>
+              </button>
+              <button
+                onClick={() => doCancel(cancelPrompt.booking, true)}
+                style={{ padding: '0.75rem', background: '#2a0000', color: '#fff', border: '1px solid #cc0000', borderRadius: '8px', cursor: 'pointer', textAlign: 'left' }}
+              >
+                <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>All {cancelPrompt.seriesCount} lessons in this series</div>
+                <div style={{ color: '#cc6666', fontSize: '0.8rem' }}>
+                  Cancels the entire recurring schedule — refund {cancelPrompt.seriesCount} tokens
                 </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {showSettings && (
-        <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '10px', padding: '1.5rem', marginBottom: '1.5rem' }}>
-          <h3 style={{ color: '#fff', margin: '0 0 1.25rem', fontSize: '1rem', letterSpacing: '1px', textTransform: 'uppercase' }}>⚙️ Notification Preferences</h3>
-          <div style={{ marginBottom: '1.25rem' }}>
-            <div style={{ color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.75rem' }}>How to notify me</div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {[{key:'notification_email',label:'📧 Email',val:profile?.notification_email??true},{key:'notification_push',label:'🔔 Push',val:profile?.notification_push??true}].map(({key,label,val})=>(
-                <button key={key} onClick={()=>savePrefs({[key]:!val})} style={{padding:'0.5rem 1rem',background:val?'#cc0000':'#2a2a2a',color:'#fff',border:val?'1px solid #cc0000':'1px solid #444',borderRadius:'6px',cursor:'pointer',fontSize:'0.85rem'}}>{label} {val?'On':'Off'}</button>
-              ))}
+              </button>
+              <button
+                onClick={() => setCancelPrompt(null)}
+                style={{ padding: '0.6rem', background: 'transparent', color: '#666', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer' }}
+              >
+                Keep my booking
+              </button>
             </div>
           </div>
-          <div style={{ marginBottom: '1rem' }}>
-            <div style={{ color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.75rem' }}>When to remind me</div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {[{key:'notification_24h',label:'24 hrs before',val:profile?.notification_24h??true},{key:'notification_2h',label:'2 hrs before',val:profile?.notification_2h??true},{key:'notification_48h',label:'48 hrs before',val:profile?.notification_48h??true}].map(({key,label,val})=>(
-                <button key={key} onClick={()=>savePrefs({[key]:!val})} style={{padding:'0.5rem 1rem',background:val?'#cc0000':'#2a2a2a',color:'#fff',border:val?'1px solid #cc0000':'1px solid #444',borderRadius:'6px',cursor:'pointer',fontSize:'0.85rem'}}>{label} {val?'✓':'○'}</button>
-              ))}
-            </div>
-          </div>
-          {savingPrefs&&<p style={{color:'#666',fontSize:'0.8rem',margin:0}}>Saving...</p>}
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #333', paddingBottom: '0.75rem' }}>
-        <button onClick={() => setActiveTab('upcoming')} style={{ padding: '0.5rem 1.2rem', background: activeTab === 'upcoming' ? 'var(--red)' : 'transparent', color: '#fff', border: activeTab === 'upcoming' ? '1px solid var(--red)' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === 'upcoming' ? 'bold' : 'normal' }}>Upcoming</button>
-        <button onClick={() => setActiveTab('history')} style={{ padding: '0.5rem 1.2rem', background: activeTab === 'history' ? 'var(--red)' : 'transparent', color: '#fff', border: activeTab === 'history' ? '1px solid var(--red)' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === 'history' ? 'bold' : 'normal' }}>History</button>
-      </div>
+      {/* Upcoming Lessons */}
+      <h2 style={{ color: '#fff', borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
+        Upcoming Lessons
+      </h2>
 
-      {activeTab === 'history' && (
-        <div>
-          {pastBookings.length === 0 ? (
-            <p style={{ color: '#666' }}>No past lessons yet.</p>
-          ) : pastBookings.map(b => {
-            const cancelled = b.status === 'cancelled'
-            const attended = b.attendance === 'attended'
-            const dns = b.attendance === 'dns'
-            const d = b.slots.slot_date
-            const h = b.slots.start_hour
-            const timeStr = h < 12 ? h + ':00 AM' : h === 12 ? '12:00 PM' : (h-12) + ':00 PM'
-            const dateStr = new Date(d + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })
-            return (
-              <div key={b.id} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '0.75rem', opacity: cancelled ? 0.6 : 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <p style={{ margin: 0, color: '#ccc', fontWeight: 'bold' }}>{dateStr} at {timeStr}</p>
-                    <p style={{ margin: '0.2rem 0 0', color: '#555', fontSize: '0.85rem' }}>Private Lesson</p>
-                  </div>
-                  {cancelled && <span style={{ background: '#3a1a1a', color: '#cc6666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0 }}>Cancelled</span>}
-                  {!cancelled && attended && <span style={{ background: '#1a3a1a', color: '#66cc66', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0 }}>✓ Attended</span>}
-                  {!cancelled && dns && <span style={{ background: '#3a1a1a', color: '#cc6666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0 }}>✗ DNS</span>}
-                  {!cancelled && !attended && !dns && <span style={{ background: '#2a2a2a', color: '#666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0 }}>Completed</span>}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {activeTab === 'upcoming' && (<>
-
-      {upcomingBookings.length === 0 ? (
+      {grouped.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
       ) : (
-        grouped.map((group) => {
+        grouped.map((group, gi) => {
           if (group.type === 'single') {
             const b = group.booking
-            const within24 = isWithin24Hours(b.slots.slot_date, b.slots.start_hour)
             return (
               <div key={b.id} style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1.1rem', color: '#fff' }}>{b.slots.slot_date} at {formatHour(b.slots.start_hour)}</p>
+                  <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1.1rem', color: '#fff' }}>
+                    {b.slots.slot_date} at {formatHour(b.slots.start_hour)}
+                  </p>
                   <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.85rem' }}>Private Lesson</p>
-                  {within24 && <p style={{ margin: '0.2rem 0 0', color: '#aa6600', fontSize: '0.78rem' }}>⚠️ Within 24hrs — no refund if cancelled</p>}
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button onClick={() => handleReschedule(b)} disabled={isProcessing} style={{ padding: '0.4rem 1rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.9rem', cursor: 'pointer' }}>Reschedule</button>
-                  <button onClick={() => handleCancelClick(b)} disabled={isProcessing} style={{ padding: '0.4rem 1rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem' }}>Cancel</button>
+                  <a href="/book" style={{ padding: '0.4rem 1rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '0.9rem' }}>Reschedule</a>
+                  <button onClick={() => handleCancelClick(b)} style={{ padding: '0.4rem 1rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem' }}>Cancel</button>
                 </div>
               </div>
             )
           }
 
+          // Recurring series group
           const { bookings: series, groupId } = group
           return (
             <div key={groupId} style={{ border: '1px solid #444', borderRadius: '10px', marginBottom: '1.25rem', overflow: 'hidden' }}>
               <div style={{ background: '#2a1a1a', borderBottom: '1px solid #333', padding: '0.6rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <span style={{ color: '#cc0000', fontSize: '0.8rem' }}>🔁</span>
-                  <span style={{ color: '#cc0000', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>Weekly Recurring — {formatHour(series[0].slots.start_hour)}</span>
+                  <span style={{ color: '#cc0000', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>
+                    Weekly Recurring — {formatHour(series[0].slots.start_hour)}
+                  </span>
                 </div>
                 <span style={{ color: '#666', fontSize: '0.8rem' }}>{series.length} lessons</span>
               </div>
-              {series.map((b, i) => {
-                const within24 = isWithin24Hours(b.slots.slot_date, b.slots.start_hour)
-                return (
-                  <div key={b.id} style={{ background: i % 2 === 0 ? '#222' : '#1e1e1e', padding: '0.75rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: i < series.length - 1 ? '1px solid #2a2a2a' : 'none' }}>
-                    <div>
-                      <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>{b.slots.slot_date}</span>
-                      <span style={{ color: '#666', fontSize: '0.85rem', marginLeft: '0.5rem' }}>at {formatHour(b.slots.start_hour)}</span>
-                      {within24 && <span style={{ color: '#aa6600', fontSize: '0.75rem', marginLeft: '0.5rem' }}>⚠️ no refund</span>}
-                    </div>
-                    <button onClick={() => handleCancelClick(b)} disabled={isProcessing} style={{ padding: '0.3rem 0.75rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
+              {series.map((b, i) => (
+                <div key={b.id} style={{
+                  background: i % 2 === 0 ? '#222' : '#1e1e1e',
+                  padding: '0.75rem 1.25rem',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  borderBottom: i < series.length - 1 ? '1px solid #2a2a2a' : 'none'
+                }}>
+                  <div>
+                    <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>{b.slots.slot_date}</span>
+                    <span style={{ color: '#666', fontSize: '0.85rem', marginLeft: '0.5rem' }}>at {formatHour(b.slots.start_hour)}</span>
                   </div>
-                )
-              })}
+                  <button
+                    onClick={() => handleCancelClick(b)}
+                    style={{ padding: '0.3rem 0.75rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
+                  >Cancel</button>
+                </div>
+              ))}
             </div>
           )
         })
       )}
-
-      </> )}
 
       <a href="/book" style={{ display: 'inline-block', marginTop: '1.5rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
         + Book a Lesson
