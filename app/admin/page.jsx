@@ -225,7 +225,7 @@ export default function Admin() {
         <div>
           <h3 style={{color:'#fff',marginBottom:'1rem'}}>Students ({students.length})</h3>
           {students.map(s=>{
-            const name=s.full_name||[s.first_name,s.last_name].filter(Boolean).join(' ')||s.email
+            const name=s.full_name||(([s.first_name,s.last_name].filter(Boolean).join(' ')||s.email)+' ('+s.email+')')+' ('+s.email+')'
             const upcoming=bookings.filter(b=>b.student_id===s.id&&b.status==='confirmed').length
             return <div key={s.id} style={{background:MID,border:'1px solid #333',borderRadius:'8px',padding:'0.75rem 1rem',marginBottom:'0.5rem',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div>
