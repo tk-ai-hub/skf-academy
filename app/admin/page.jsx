@@ -12,11 +12,10 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 10)
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-function getWeekDates(referenceDate) {
-  const d = new Date(referenceDate)
+function getWeekDates(offset) {
+  const d = new Date()
   const day = d.getDay() // 0 = Sunday
-  const monday = new Date(d)
-  monday.setDate(d.getDate() - ((day + 6) % 7)) // shift to Monday
+  const dow=d.getDay();d.setDate(d.getDate()-(dow===0?6:dow-1)+offset*7);const monday=new Date(d) // shift to Monday
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday)
     date.setDate(monday.getDate() + i)
