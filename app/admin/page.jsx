@@ -14,8 +14,8 @@ const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 
 function getWeekDates(offset) {
   const d = new Date()
-  const day = d.getDay() // 0 = Sunday
-  const dow=d.getDay();d.setDate(d.getDate()-(dow===0?6:dow-1)+offset*7);const monday=new Date(d) // shift to Monday
+  const dow = d.getDay()
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1) + offset * 7)
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday)
     date.setDate(monday.getDate() + i)
