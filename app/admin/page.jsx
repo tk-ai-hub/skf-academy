@@ -232,7 +232,7 @@ export default function Admin() {
         setMessage(`✅ Slot booked for guest ${bookGuestName} on ${bookDate} at ${formatHour(bookHour)}`)
       } else {
         // Book for existing student
-        const { data: slot } = await supabase.from('slots').select('id').eq('slot_date', bookDate).eq('start_hour', bookHour).eq('is_blocked', false).single()
+        const { data: slot } = await supabase.from('slots').select('id').eq('slot_date', bookDate).eq('start_hour', bookHour).single()
         if (!slot) { setMessage('That slot is not available.'); setBookingInProgress(false); return }
         await supabase.from('bookings').insert({
           tenant_id: tenant.id,
