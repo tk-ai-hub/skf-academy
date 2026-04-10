@@ -34,7 +34,7 @@ export async function POST(request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  const { studentId, guestFirstName, guestLastName, guestPhone, slotId } = await request.json()
+  const { studentId, guestFirstName, guestLastName, guestPhone, slotId, recurring, weeks } = await request.json()
 
   if (!slotId) return Response.json({ error: 'slotId is required' }, { status: 400 })
   if (!studentId && !guestFirstName) return Response.json({ error: 'studentId or guest name is required' }, { status: 400 })
@@ -96,22 +96,34 @@ export async function POST(request) {
     studentPhone = profile?.phone || ''
   }
 
-  // Insert booking (no token deduction — admin-initiated)
-  const { data: booking, error: bookingError } = await supabaseAdmin
-    .from('bookings')
-    .insert({
-      tenant_id: slot.tenant_id,
-      student_id: userId,
-      slot_id: slotId,
-      status: 'confirmed'
-    })
-    .select()
-    .single()
+  // Build slots list - recurring or single
+  const slotsToBook = []
+  const groupId = (recurring && weeks > 1) ? crypto.randomUUID() : null
+  const numWeeks = (recurring && weeks > 1) ? Number(weeks) : 1
 
-  if (bookingError) return Response.json({ error: bookingError.message }, { status: 500 })
+  for (let i = 0; i < numWeeks; i++) {
+    if (i === 0) {
+      slotsToBook.push({ sid: slotId, date: slot.slot_date })
+    } else {
+      const baseDate = new Date(slot.slot_date + 'T12:00:00')
+      baseDate.setDate(baseDate.getDate() + i * 7)
+      const dateStr = baseDate.toISOString().split('T')[0]
+      const { data: nextSlot } = await supabaseAdmin.from('slots').select('id').eq('slot_date', dateStr).eq('start_hour', slot.start_hour).maybeSingle()
+      if (nextSlot) slotsToBook.push({ sid: nextSlot.id, date: dateStr })
+    }
+  }
 
-  // Add to Google Calendar
-  await addToGoogleCalendar(slot.slot_date, slot.start_hour, studentName, studentPhone || 'No phone')
+  let booking = null
+  for (const s of slotsToBook) {
+    const { data: b } = await supabaseAdmin.from('bookings').insert({
+      tenant_id: slot.tenant_id, student_id: userId, slot_id: s.sid,
+      status: 'confirmed', is_recurring: numWeeks > 1, recurring_group_id: groupId
+    }).select().single()
+    if (!booking) booking = b
+    await addToGoogleCalendar(s.date, slot.start_hour, studentName, studentPhone || 'No phone')
+  }
+
+  if (!booking) return Response.json({ error: 'Booking failed' }, { status: 500 })
 
   // Deduct token if registered student (not guest)
   if (studentId) {
