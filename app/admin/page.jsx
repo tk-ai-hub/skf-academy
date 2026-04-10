@@ -43,6 +43,7 @@ export default function Admin() {
   const [blkDate,setBlkDate] = useState('')
   const [blkHour,setBlkHour] = useState(10)
   const [blkReason,setBlkReason] = useState('')
+  const [blkEndHour,setBlkEndHour] = useState(21)
 
   const week = getWeek(wOff)
   const wStart = week[0]
@@ -110,8 +111,12 @@ export default function Admin() {
 
   async function blockIt() {
     if(!blkDate){flash('Select a date');return}
-    await supabase.from('slots').update({is_blocked:true,block_reason:blkReason||'Unavailable'}).eq('slot_date',blkDate).eq('start_hour',blkHour)
-    flash('Blocked');setShowBlk(false);setBlkDate('');setBlkReason('');load()
+    if(blkEndHour < blkHour){flash('End time must be after start time');return}
+    const hours = []
+    for(let h = blkHour; h <= blkEndHour; h++) hours.push(h)
+    await supabase.from('slots').update({is_blocked:true,block_reason:blkReason||'Unavailable'}).eq('slot_date',blkDate).in('start_hour',hours)
+    flash('Blocked ' + hours.length + ' slot' + (hours.length > 1 ? 's' : '') + ' on ' + blkDate)
+    setShowBlk(false);setBlkDate('');setBlkReason('');setBlkEndHour(21);load()
   }
 
   async function unblock(s) {
@@ -276,7 +281,7 @@ export default function Admin() {
       {showBlk&&modal('🔒 Block a Slot',(
         <div>
           {lbl('Date')}{inp(blkDate,setBlkDate,'date')}
-          {lbl('Time')}{sel(blkHour,h=>setBlkHour(Number(h)),HOURS.map(h=><option key={h} value={h}>{fmt(h)}</option>))}
+          {lbl('Start Time')}{sel(blkHour,h=>setBlkHour(Number(h)),HOURS.map(h=><option key={h} value={h}>{fmt(h)}</option>))}{lbl('End Time')}{sel(blkEndHour,h=>setBlkEndHour(Number(h)),HOURS.map(h=><option key={h} value={h}>{fmt(h)}</option>))}
           {lbl('Reason (optional)')}{inp(blkReason,setBlkReason,'text','e.g. Day off, Tournament...')}
           <button onClick={blockIt} disabled={busy} style={{width:'100%',marginTop:'1.5rem',padding:'0.85rem',background:RED,color:'#fff',border:'none',borderRadius:'8px',cursor:'pointer',fontWeight:'bold',fontSize:'1rem'}}>Block Slot</button>
         </div>
