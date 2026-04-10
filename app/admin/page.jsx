@@ -37,6 +37,8 @@ export default function Admin() {
   const [bFirst,setBFirst] = useState('')
   const [bLast,setBLast] = useState('')
   const [bPhone,setBPhone] = useState('')
+  const [bRecurring,setBRecurring] = useState(false)
+  const [bWeeks,setBWeeks] = useState(4)
   const [showBlk,setShowBlk] = useState(false)
   const [blkDate,setBlkDate] = useState('')
   const [blkHour,setBlkHour] = useState(10)
@@ -265,6 +267,8 @@ export default function Admin() {
           {bType==='registered'?<>{lbl('Student')}{sel(bStudent,setBStudent,[<option key="" value="">Select student...</option>,...students.map(s=><option key={s.id} value={s.id}>{[s.first_name,s.last_name].filter(Boolean).join(' ')||s.email}</option>)])}</>:<>{lbl('First Name')}{inp(bFirst,setBFirst,'text','First name')}{lbl('Last Name')}{inp(bLast,setBLast,'text','Last name (optional)')}{lbl('Phone')}{inp(bPhone,setBPhone,'tel','Phone number')}</>}
           {lbl('Date')}{inp(bDate,setBDate,'date')}
           {lbl('Time')}{sel(bHour,h=>setBHour(Number(h)),HOURS.map(h=><option key={h} value={h}>{fmt(h)}</option>))}
+          <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginTop:'1rem'}}><input type='checkbox' id='recur' checked={bRecurring} onChange={e=>setBRecurring(e.target.checked)} style={{width:'18px',height:'18px',cursor:'pointer'}} /><label htmlFor='recur' style={{color:'#ccc',fontSize:'0.9rem',cursor:'pointer'}}>Recurring Weekly</label></div>
+          {bRecurring&&<>{lbl('Number of Weeks')}{sel(bWeeks,w=>setBWeeks(Number(w)),[4,6,8,10,12,16,24,52].map(w=><option key={w} value={w}>{w} weeks</option>))}</>}
           <button onClick={book} disabled={busy} style={{width:'100%',marginTop:'1.5rem',padding:'0.85rem',background:RED,color:'#fff',border:'none',borderRadius:'8px',cursor:'pointer',fontWeight:'bold',fontSize:'1rem'}}>{busy?'Booking...':'Book Lesson'}</button>
         </div>
       ),()=>setShowBook(false))}
