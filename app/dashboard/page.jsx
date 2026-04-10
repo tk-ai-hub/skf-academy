@@ -50,6 +50,7 @@ export default function Dashboard() {
   }, [])
 
   function handleCancelClick(booking) {
+    if (booking.slots.slot_date < new Date().toISOString().split("T")[0]) { alert("Cannot cancel a past lesson."); return }
     if (booking.is_recurring && booking.recurring_group_id) {
       // Check if there are other bookings in the same recurring group
       const seriesBookings = bookings.filter(
