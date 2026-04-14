@@ -12,7 +12,7 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 10)
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-function getWeekDates(offset) {
+function getWeekDates(weekOffset) {
   const now = new Date()
   const local = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const dow = local.getDay()
@@ -179,7 +179,7 @@ export default function Admin() {
   const today = new Date()
   const referenceDate = new Date(today)
   referenceDate.setDate(today.getDate() + weekOffset * 7)
-  const weekDates = getWeekDates(referenceDate.toISOString().split('T')[0])
+  const weekDates = getWeekDates(weekOffset).split('T')[0])
   const weekStart = weekDates[0]
   const weekEnd = weekDates[6]
 
