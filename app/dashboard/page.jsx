@@ -227,36 +227,12 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #333', paddingBottom: '0.75rem' }}>
-        {['upcoming', 'history'].map(t => (
-          <button key={t} onClick={() => setActiveTab(t)} style={{ padding: '0.5rem 1.2rem', background: activeTab === t ? '#cc0000' : 'transparent', color: '#fff', border: activeTab === t ? '1px solid #cc0000' : '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeTab === t ? 'bold' : 'normal', textTransform: 'capitalize' }}>{t}</button>
-        ))}
-      </div>
+      {/* Upcoming Lessons */}
+      <h2 style={{ color: '#fff', borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
+        Upcoming Lessons
+      </h2>
 
-      {/* History Tab */}
-      {activeTab === 'history' && (
-        <div>
-          {bookings.filter(b => b.slots?.slot_date < new Date().toISOString().split('T')[0]).length === 0
-            ? <p style={{ color: '#666' }}>No past lessons yet.</p>
-            : bookings.filter(b => b.slots?.slot_date < new Date().toISOString().split('T')[0]).sort((a,b) => b.slots.slot_date.localeCompare(a.slots.slot_date)).map(b => (
-              <div key={b.id} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: b.status === 'cancelled' ? 0.6 : 1 }}>
-                <div>
-                  <p style={{ margin: 0, color: '#ccc', fontWeight: 'bold' }}>{b.slots.slot_date} at {formatHour(b.slots.start_hour)}</p>
-                  <p style={{ margin: '0.2rem 0 0', color: '#555', fontSize: '0.85rem' }}>Private Lesson</p>
-                </div>
-                {b.status === 'cancelled' && <span style={{ background: '#3a1a1a', color: '#cc6666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>Cancelled</span>}
-                {b.attendance === 'attended' && <span style={{ background: '#1a3a1a', color: '#66cc66', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>✓ Attended</span>}
-                {b.attendance === 'dns' && <span style={{ background: '#3a1a1a', color: '#cc6666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>✗ DNS</span>}
-                {b.status !== 'cancelled' && !b.attendance && <span style={{ background: '#2a2a2a', color: '#666', padding: '0.3rem 0.7rem', borderRadius: '4px', fontSize: '0.8rem' }}>Completed</span>}
-              </div>
-            ))
-          }
-        </div>
-      )}
-
-      {/* Upcoming Tab */}
-      {activeTab === 'upcoming' && (grouped.filter(g => g.type === 'single' ? g.booking.slots?.slot_date >= new Date().toISOString().split('T')[0] : g.bookings?.some(b => b.slots?.slot_date >= new Date().toISOString().split('T')[0])).length === 0 ? (
+      {grouped.length === 0 ? (
         <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
       ) : (
         grouped.map((group, gi) => {
@@ -313,7 +289,6 @@ export default function Dashboard() {
         })
       )}
 
-      )}
       <a href="/book" style={{ display: 'inline-block', marginTop: '1.5rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
         + Book a Lesson
       </a>
