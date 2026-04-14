@@ -11,10 +11,11 @@ function fmt(h) { return h < 12 ? h+':00 AM' : h === 12 ? '12:00 PM' : (h-12)+':
 function w24(date, hour) { return (new Date(date+'T'+String(hour).padStart(2,'0')+':00:00') - new Date()) < 86400000 }
 function getWeek(offset) {
   const now = new Date()
-  const dow = now.getDay()
-  const mon = new Date(now)
-  mon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1) + offset * 7)
-  return Array.from({length:7}, (_,i) => { const d=new Date(mon); d.setDate(mon.getDate()+i); return d.toISOString().split('T')[0] })
+  const local = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const dow = local.getDay()
+  const mon = new Date(local)
+  mon.setDate(local.getDate() - (dow === 0 ? 6 : dow - 1) + offset * 7)
+  return Array.from({length:7}, (_,i) => { const d=new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+i); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') })
 }
 function sname(u) { if(!u) return 'Unknown'; return u.full_name||[u.first_name,u.last_name].filter(Boolean).join(' ')||u.email||'Guest' }
 const inp = (v,s,t='text',p='') => <input type={t} value={v} onChange={e=>s(e.target.value)} placeholder={p} style={{width:'100%',padding:'0.6rem',background:MID,color:'#fff',border:'1px solid #444',borderRadius:'6px',fontSize:'0.9rem',boxSizing:'border-box'}} />
