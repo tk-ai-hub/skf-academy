@@ -58,7 +58,7 @@ export default function Login() {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
     if (error) setMessage(error.message)
-    else window.location.href = '/dashboard'
+    else { const { data: profile } = await supabase.from('users').select('role').eq('id',(await supabase.auth.getUser()).data.user.id).single(); window.location.href = profile?.data?.role === 'admin' || profile?.role === 'admin' ? '/admin' : '/dashboard' }
   }
 
   async function handleSignUp() {

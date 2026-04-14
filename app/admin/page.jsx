@@ -168,7 +168,7 @@ export default function Admin() {
                 <tr>
                   <th style={{color:'#555',fontSize:'0.75rem',padding:'0.5rem',textAlign:'left',width:'70px'}}>TIME</th>
                   {week.map((date,i)=>{
-                    const isToday=date===new Date().toISOString().split('T')[0]
+                    const n=new Date();const isToday=date===n.getFullYear()+"-"+String(n.getMonth()+1).padStart(2,"0")+"-"+String(n.getDate()).padStart(2,"0")
                     const cnt=wBook.filter(b=>b.slots?.slot_date===date).length
                     return <th key={date} style={{color:isToday?RED:'#ccc',fontSize:'0.8rem',padding:'0.5rem',textAlign:'center',borderBottom:'1px solid #333'}}>
                       <div>{DAYS[i]}</div>
