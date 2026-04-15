@@ -232,6 +232,22 @@ export default function Admin() {
         <button style={tabStyle('bookings')} onClick={() => setActiveTab('bookings')}>📋 All Bookings</button>
         <button style={tabStyle('students')} onClick={() => setActiveTab('students')}>👥 Students</button>
         <button style={tabStyle('block')} onClick={() => setActiveTab('block')}>🔒 Block Dates</button>
+        <a href="/admin/book" style={{
+          marginLeft: 'auto',
+          padding: '0.5rem 1.1rem',
+          background: '#cc0000',
+          color: '#fff',
+          border: '1px solid #cc0000',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          fontSize: '0.85rem',
+          fontWeight: 'bold',
+          letterSpacing: '0.5px',
+          textDecoration: 'none',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.4rem'
+        }}>+ Book Lesson</a>
       </div>
 
       {/* ── WEEK VIEW TAB ── */}
@@ -347,7 +363,17 @@ export default function Admin() {
                               ))}
                             </div>
                           ) : (
-                            <div style={{ height: '42px' }} />
+                            <a
+                              href={`/admin/book?date=${date}`}
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                height: '42px', color: '#333', fontSize: '1.1rem',
+                                textDecoration: 'none', borderRadius: '4px',
+                                transition: 'all 0.1s'
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.color = '#cc0000'; e.currentTarget.style.background = '#1a0000' }}
+                              onMouseLeave={e => { e.currentTarget.style.color = '#333'; e.currentTarget.style.background = 'transparent' }}
+                            >+</a>
                           )}
                         </td>
                       )

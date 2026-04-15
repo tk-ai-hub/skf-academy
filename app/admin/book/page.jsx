@@ -52,6 +52,7 @@ const cardStyle = {
 
 export default function AdminBook() {
   const [step, setStep] = useState(1)
+  const preselectedDate = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('date') : null
 
   // Student selection
   const [searchQuery, setSearchQuery] = useState('')
@@ -127,7 +128,10 @@ export default function AdminBook() {
       setSlots(slotData || [])
       const dates = [...new Set((slotData || []).map(s => s.slot_date))]
       setAvailableDates(dates)
-      if (dates.length > 0) setSelectedDate(dates[0])
+      if (dates.length > 0) {
+        const pre = preselectedDate && dates.includes(preselectedDate) ? preselectedDate : dates[0]
+        setSelectedDate(pre)
+      }
     }
     load()
   }, [])
