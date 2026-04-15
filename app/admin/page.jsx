@@ -49,6 +49,11 @@ function studentName(s) {
   return s?.email || 'Unknown'
 }
 
+function studentNameById(students, id) {
+  const s = students.find(s => s.id === id)
+  return studentName(s)
+}
+
 export default function Admin() {
   const [bookings, setBookings] = useState([])
   const [students, setStudents] = useState([])
@@ -73,8 +78,7 @@ export default function Admin() {
       .from('bookings')
       .select(`
         id, status, booked_at, tenant_id, student_id,
-        slots!bookings_slot_id_fkey (id, slot_date, start_hour),
-        users!bookings_student_id_fkey (full_name, first_name, last_name, email)
+        slots!bookings_slot_id_fkey (id, slot_date, start_hour)
       `)
       .eq('status', 'confirmed')
       .order('booked_at', { ascending: false })
@@ -179,7 +183,7 @@ export default function Admin() {
   const today = new Date()
   const referenceDate = new Date(today)
   referenceDate.setDate(today.getDate() + weekOffset * 7)
-  const weekDates = getWeekDates(weekOffset).split('T')[0])
+  const weekDates = getWeekDates(weekOffset)
   const weekStart = weekDates[0]
   const weekEnd = weekDates[6]
 
@@ -187,8 +191,8 @@ export default function Admin() {
     b.slots?.slot_date >= weekStart && b.slots?.slot_date <= weekEnd
   )
 
-  function getBookingForCell(date, hour) {
-    return weekBookings.find(b => b.slots?.slot_date === date && b.slots?.start_hour === hour)
+  function getBookingsForCell(date, hour) {
+    return weekBookings.filter(b => b.slots?.slot_date === date && b.slots?.start_hour === hour)
   }
 
   function formatWeekLabel() {
@@ -305,7 +309,7 @@ export default function Admin() {
                       {formatHour(hour)}
                     </td>
                     {weekDates.map(date => {
-                      const booking = getBookingForCell(date, hour)
+                      const cellBookings = getBookingsForCell(date, hour)
                       const isToday = date === today.toISOString().split('T')[0]
                       return (
                         <td key={date} style={{
@@ -315,28 +319,32 @@ export default function Admin() {
                           verticalAlign: 'top',
                           minHeight: '48px'
                         }}>
-                          {booking ? (
-                            <div style={{
-                              background: '#2a0000',
-                              border: '1px solid #cc0000',
-                              borderRadius: '5px',
-                              padding: '0.3rem 0.4rem',
-                              cursor: 'default'
-                            }}>
-                              <div style={{ color: '#fff', fontSize: '0.78rem', fontWeight: 'bold', lineHeight: 1.3 }}>
-                                {studentName(booking.users)}
-                              </div>
-                              <div style={{ color: '#cc0000', fontSize: '0.68rem', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                Private Lesson
-                              </div>
-                              <button
-                                onClick={() => cancelBooking(booking)}
-                                style={{
-                                  marginTop: '4px', padding: '1px 5px', fontSize: '0.65rem',
-                                  background: 'transparent', color: '#884444',
-                                  border: '1px solid #442222', borderRadius: '3px', cursor: 'pointer'
-                                }}
-                              >cancel</button>
+                          {cellBookings.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              {cellBookings.map(booking => (
+                                <div key={booking.id} style={{
+                                  background: '#2a0000',
+                                  border: '1px solid #cc0000',
+                                  borderRadius: '5px',
+                                  padding: '0.3rem 0.4rem',
+                                  cursor: 'default'
+                                }}>
+                                  <div style={{ color: '#fff', fontSize: '0.78rem', fontWeight: 'bold', lineHeight: 1.3 }}>
+                                    {studentNameById(students, booking.student_id)}
+                                  </div>
+                                  <div style={{ color: '#cc0000', fontSize: '0.68rem', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                    Private Lesson
+                                  </div>
+                                  <button
+                                    onClick={() => cancelBooking(booking)}
+                                    style={{
+                                      marginTop: '4px', padding: '1px 5px', fontSize: '0.65rem',
+                                      background: 'transparent', color: '#884444',
+                                      border: '1px solid #442222', borderRadius: '3px', cursor: 'pointer'
+                                    }}
+                                  >cancel</button>
+                                </div>
+                              ))}
                             </div>
                           ) : (
                             <div style={{ height: '42px' }} />
@@ -368,7 +376,7 @@ export default function Admin() {
                 <div>
                   <p style={{ margin: 0, fontWeight: 'bold', color: '#fff' }}>{b.slots.slot_date} at {formatHour(b.slots.start_hour)}</p>
                   <p style={{ margin: '0.25rem 0 0', color: '#cc0000', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Private Lesson</p>
-                  <p style={{ margin: '0.15rem 0 0', color: '#888', fontSize: '0.85rem' }}>{studentName(b.users)}</p>
+                  <p style={{ margin: '0.15rem 0 0', color: '#888', fontSize: '0.85rem' }}>{studentNameById(students, b.student_id)}</p>
                 </div>
                 <button
                   onClick={() => cancelBooking(b)}
