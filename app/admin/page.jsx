@@ -71,6 +71,14 @@ export default function Admin() {
   // Weekly calendar state
   const [activeTab, setActiveTab] = useState('week') // 'week' | 'bookings' | 'students' | 'block'
   const [weekOffset, setWeekOffset] = useState(0)
+
+  // Quick-book modal state
+  const [bookModal, setBookModal] = useState(null) // { date, hour }
+  const [bookModalSlot, setBookModalSlot] = useState(null)
+  const [bookModalSearch, setBookModalSearch] = useState('')
+  const [bookModalStudent, setBookModalStudent] = useState(null)
+  const [bookModalProcessing, setBookModalProcessing] = useState(false)
+  const [bookModalSuccess, setBookModalSuccess] = useState(false)
   const [blockWeekOffset, setBlockWeekOffset] = useState(0)
   const [blockCalSlots, setBlockCalSlots] = useState([])
 
@@ -201,6 +209,55 @@ export default function Admin() {
     setMessage(`${slot.slot_date} at ${formatHour(slot.start_hour)} unblocked.`)
     loadData(); loadBlockCalSlots()
   }
+
+  // --- Quick-book modal ---
+  async function openBookModal(date, hour) {
+    setBookModal({ date, hour })
+    setBookModalSlot(null)
+    setBookModalSearch('')
+    setBookModalStudent(null)
+    setBookModalProcessing(false)
+    setBookModalSuccess(false)
+    const { data } = await supabase.from('slots').select('id').eq('slot_date', date).eq('start_hour', hour).single()
+    setBookModalSlot(data || null)
+  }
+
+  function closeBookModal() {
+    setBookModal(null)
+    setBookModalSlot(null)
+    setBookModalSearch('')
+    setBookModalStudent(null)
+    setBookModalSuccess(false)
+  }
+
+  async function confirmBookModal() {
+    if (!bookModalStudent || !bookModalSlot || bookModalProcessing) return
+    setBookModalProcessing(true)
+    const res = await fetch('/api/admin-book', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slotId: bookModalSlot.id, studentId: bookModalStudent.id })
+    })
+    setBookModalProcessing(false)
+    if (res.ok) {
+      setBookModalSuccess(true)
+      loadData()
+      setTimeout(() => closeBookModal(), 1200)
+    } else {
+      const d = await res.json()
+      setMessage(d.error || 'Booking failed.')
+      closeBookModal()
+    }
+  }
+
+  const bookModalFiltered = bookModalSearch.trim()
+    ? students.filter(s => {
+        const name = studentName(s).toLowerCase()
+        const phone = (s.phone || '').replace(/\D/g, '')
+        const q = bookModalSearch.toLowerCase().trim()
+        return name.includes(q) || phone.includes(q.replace(/\D/g, ''))
+      })
+    : students
 
   // --- Block Calendar Logic ---
   const blockWeekDates = getWeekDates(blockWeekOffset)
@@ -414,17 +471,16 @@ export default function Admin() {
                               ))}
                             </div>
                           ) : (
-                            <a
-                              href={`/admin/book?date=${date}`}
+                            <button
+                              onClick={() => openBookModal(date, hour)}
                               style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                height: '42px', color: '#333', fontSize: '1.1rem',
-                                textDecoration: 'none', borderRadius: '4px',
-                                transition: 'all 0.1s'
+                                width: '100%', height: '42px', background: 'transparent', border: 'none',
+                                color: '#333', fontSize: '1.2rem', cursor: 'pointer', borderRadius: '4px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
                               }}
                               onMouseEnter={e => { e.currentTarget.style.color = '#cc0000'; e.currentTarget.style.background = '#1a0000' }}
                               onMouseLeave={e => { e.currentTarget.style.color = '#333'; e.currentTarget.style.background = 'transparent' }}
-                            >+</a>
+                            >+</button>
                           )}
                         </td>
                       )
@@ -630,6 +686,98 @@ export default function Admin() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      {/* ── QUICK-BOOK MODAL ── */}
+      {bookModal && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) closeBookModal() }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: '1rem'
+          }}
+        >
+          <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '10px', padding: '1.5rem', width: '100%', maxWidth: '420px' }}>
+            {bookModalSuccess ? (
+              <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</div>
+                <div style={{ color: '#fff', fontWeight: 'bold' }}>Booked!</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+                  <div>
+                    <div style={{ color: '#999', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>New Booking</div>
+                    <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.05rem', marginTop: '0.2rem' }}>
+                      {new Date(bookModal.date + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })} · {formatHour(bookModal.hour)}
+                    </div>
+                  </div>
+                  <button onClick={closeBookModal} style={{ background: 'none', border: 'none', color: '#555', fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                </div>
+
+                <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Search client by name or phone..."
+                    value={bookModalSearch}
+                    onChange={e => { setBookModalSearch(e.target.value); setBookModalStudent(null) }}
+                    style={{ width: '100%', padding: '0.65rem 0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                  />
+                  {!bookModalStudent && bookModalFiltered.length > 0 && bookModalSearch.trim() && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#111', border: '1px solid #333', borderRadius: '0 0 6px 6px', zIndex: 10, maxHeight: '220px', overflowY: 'auto' }}>
+                      {bookModalFiltered.map(s => (
+                        <div
+                          key={s.id}
+                          onClick={() => { setBookModalStudent(s); setBookModalSearch(studentName(s)) }}
+                          style={{ padding: '0.65rem 0.9rem', cursor: 'pointer', borderBottom: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#2a2a2a'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <span style={{ color: '#fff' }}>{studentName(s)}</span>
+                          <span style={{ color: '#555', fontSize: '0.85rem' }}>{s.phone || ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {bookModalStudent && (
+                  <div style={{ background: '#2a0000', border: '1px solid #cc0000', borderRadius: '6px', padding: '0.6rem 0.9rem', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#fff', fontWeight: 'bold' }}>{studentName(bookModalStudent)}</span>
+                    <button onClick={() => { setBookModalStudent(null); setBookModalSearch('') }} style={{ background: 'none', border: 'none', color: '#884444', cursor: 'pointer', fontSize: '1.1rem' }}>×</button>
+                  </div>
+                )}
+
+                {!bookModalSlot && bookModal && (
+                  <p style={{ color: '#666', fontSize: '0.8rem', margin: '0 0 0.75rem' }}>Loading slot…</p>
+                )}
+                {bookModalSlot === null && bookModal && bookModalSlot !== undefined && (
+                  <p style={{ color: '#884444', fontSize: '0.8rem', margin: '0 0 0.75rem' }}>No slot available for this time.</p>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+                  <button onClick={closeBookModal} style={{ flex: 1, padding: '0.7rem', background: 'transparent', border: '1px solid #333', borderRadius: '6px', color: '#888', cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmBookModal}
+                    disabled={!bookModalStudent || !bookModalSlot || bookModalProcessing}
+                    style={{
+                      flex: 2, padding: '0.7rem', borderRadius: '6px', border: 'none',
+                      background: bookModalStudent && bookModalSlot ? '#cc0000' : '#333',
+                      color: bookModalStudent && bookModalSlot ? '#fff' : '#666',
+                      cursor: bookModalStudent && bookModalSlot ? 'pointer' : 'not-allowed',
+                      fontWeight: 'bold', fontSize: '0.95rem'
+                    }}
+                  >
+                    {bookModalProcessing ? 'Booking…' : 'Confirm Booking'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
