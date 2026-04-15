@@ -71,8 +71,11 @@ export default function Admin() {
   // Weekly calendar state
   const [activeTab, setActiveTab] = useState('week') // 'week' | 'bookings' | 'students' | 'block'
   const [weekOffset, setWeekOffset] = useState(0)
+  const [blockWeekOffset, setBlockWeekOffset] = useState(0)
+  const [blockCalSlots, setBlockCalSlots] = useState([])
 
   useEffect(() => { loadData() }, [])
+  useEffect(() => { loadBlockCalSlots() }, [blockWeekOffset])
 
   async function loadData() {
     const { data: bookingData } = await supabase
@@ -108,6 +111,18 @@ export default function Admin() {
       return !rangeData?.some(r => slot.slot_date >= r.start_date && slot.slot_date <= r.end_date)
     }) || []
     setBlockedSlots(rangeSlots)
+  }
+
+  async function loadBlockCalSlots() {
+    const dates = getWeekDates(blockWeekOffset)
+    const { data } = await supabase
+      .from('slots')
+      .select('id, slot_date, start_hour, is_blocked, block_reason')
+      .gte('slot_date', dates[0])
+      .lte('slot_date', dates[6])
+      .order('slot_date', { ascending: true })
+      .order('start_hour', { ascending: true })
+    setBlockCalSlots(data || [])
   }
 
   async function cancelBooking(booking) {
@@ -150,7 +165,7 @@ export default function Admin() {
       .gte('slot_date', blockStart).lte('slot_date', blockEnd)
     setMessage(`Dates blocked from ${blockStart} to ${blockEnd}.`)
     setBlockStart(''); setBlockEnd(''); setBlockReason('')
-    loadData()
+    loadData(); loadBlockCalSlots()
   }
 
   async function unblockRange(range) {
@@ -159,7 +174,7 @@ export default function Admin() {
       .update({ is_blocked: false, block_reason: null })
       .gte('slot_date', range.start_date).lte('slot_date', range.end_date)
     setMessage('Dates unblocked.')
-    loadData()
+    loadData(); loadBlockCalSlots()
   }
 
   async function blockSingleSlot() {
@@ -176,7 +191,7 @@ export default function Admin() {
       : `${blockSlotDate} from ${formatHour(startHour)} to ${formatHour(endHour)}`
     setMessage(`${label} blocked.`)
     setBlockSlotDate(''); setBlockSlotReason('')
-    loadData()
+    loadData(); loadBlockCalSlots()
   }
 
   async function unblockSlot(slot) {
@@ -184,7 +199,35 @@ export default function Admin() {
       .update({ is_blocked: false, block_reason: null })
       .eq('id', slot.id)
     setMessage(`${slot.slot_date} at ${formatHour(slot.start_hour)} unblocked.`)
-    loadData()
+    loadData(); loadBlockCalSlots()
+  }
+
+  // --- Block Calendar Logic ---
+  const blockWeekDates = getWeekDates(blockWeekOffset)
+  const blockWeekStart = blockWeekDates[0]
+  const blockWeekEnd = blockWeekDates[6]
+
+  function formatBlockWeekLabel() {
+    const s = new Date(blockWeekStart + 'T00:00:00')
+    const e = new Date(blockWeekEnd + 'T00:00:00')
+    const opts = { month: 'short', day: 'numeric' }
+    return `${s.toLocaleDateString('en-CA', opts)} – ${e.toLocaleDateString('en-CA', opts)}, ${e.getFullYear()}`
+  }
+
+  function getBlockCellSlot(date, hour) {
+    return blockCalSlots.find(s => s.slot_date === date && s.start_hour === hour)
+  }
+
+  async function toggleBlockCell(slot) {
+    if (!slot) return
+    if (slot.is_blocked) {
+      await unblockSlot(slot)
+    } else {
+      await supabase.from('slots')
+        .update({ is_blocked: true, block_reason: blockSlotReason || 'Unavailable' })
+        .eq('id', slot.id)
+      loadData(); loadBlockCalSlots()
+    }
   }
 
   // --- Weekly Calendar Logic ---
@@ -463,86 +506,131 @@ export default function Admin() {
       {/* ── BLOCK DATES TAB ── */}
       {activeTab === 'block' && (
         <div>
-          <h2 style={{ color: '#fff', marginTop: 0 }}>Block Date Range</h2>
-          <div style={{ border: '1px solid #333', borderRadius: '8px', padding: '1.5rem', marginBottom: '1rem', background: '#2a2a2a' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>From</label>
-                <input type="date" value={blockStart} onChange={e => setBlockStart(e.target.value)}
-                  style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }} />
+          {/* Block Date Range form */}
+          <details style={{ marginBottom: '1.25rem' }}>
+            <summary style={{ color: '#999', fontSize: '0.85rem', cursor: 'pointer', userSelect: 'none', marginBottom: '0.5rem' }}>
+              Block full date range ▾
+            </summary>
+            <div style={{ border: '1px solid #333', borderRadius: '8px', padding: '1.25rem', background: '#2a2a2a', marginTop: '0.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>From</label>
+                  <input type="date" value={blockStart} onChange={e => setBlockStart(e.target.value)}
+                    style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>To</label>
+                  <input type="date" value={blockEnd} onChange={e => setBlockEnd(e.target.value)}
+                    style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }} />
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>To</label>
-                <input type="date" value={blockEnd} onChange={e => setBlockEnd(e.target.value)}
-                  style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }} />
-              </div>
+              <input type="text" placeholder="Reason (e.g. Summer holiday)" value={blockReason} onChange={e => setBlockReason(e.target.value)}
+                style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', marginBottom: '1rem', boxSizing: 'border-box' }} />
+              <button onClick={blockDates} style={{ padding: '0.65rem 1.25rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                Block These Dates
+              </button>
             </div>
-            <input type="text" placeholder="Reason (e.g. Summer holiday)" value={blockReason} onChange={e => setBlockReason(e.target.value)}
-              style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', marginBottom: '1rem', boxSizing: 'border-box' }} />
-            <button onClick={blockDates} style={{ padding: '0.75rem 1.5rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
-              Block These Dates
-            </button>
+            {blockedRanges.length > 0 && (
+              <div style={{ marginTop: '0.75rem' }}>
+                {blockedRanges.map(r => (
+                  <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #552222', borderRadius: '6px', padding: '0.5rem 0.75rem', marginBottom: '0.4rem', background: '#1a0000' }}>
+                    <div>
+                      <strong style={{ color: '#fff', fontSize: '0.85rem' }}>{r.start_date} → {r.end_date}</strong>
+                      {r.reason && <span style={{ marginLeft: '0.75rem', color: '#666', fontSize: '0.8rem' }}>{r.reason}</span>}
+                    </div>
+                    <button onClick={() => unblockRange(r)} style={{ padding: '0.2rem 0.6rem', background: 'transparent', color: '#cc0000', border: '1px solid #552222', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>Unblock</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </details>
+
+          {/* Default reason for click-to-block */}
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem' }}>
+            <input
+              type="text"
+              placeholder="Block reason (optional — applies when clicking slots)"
+              value={blockSlotReason}
+              onChange={e => setBlockSlotReason(e.target.value)}
+              style={{ flex: 1, padding: '0.5rem 0.75rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.85rem' }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#555', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+              <span style={{ width: '12px', height: '12px', background: '#cc0000', borderRadius: '2px', display: 'inline-block' }} /> Blocked
+              <span style={{ width: '12px', height: '12px', background: '#1a1a1a', border: '1px solid #333', borderRadius: '2px', display: 'inline-block', marginLeft: '0.4rem' }} /> Available
+            </div>
           </div>
 
-          {blockedRanges.length > 0 && (
-            <>
-              <h3 style={{ color: '#fff' }}>Currently Blocked Ranges</h3>
-              {blockedRanges.map(r => (
-                <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #cc0000', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.5rem', background: '#2a1a1a' }}>
-                  <div>
-                    <strong style={{ color: '#fff' }}>{r.start_date} → {r.end_date}</strong>
-                    <span style={{ marginLeft: '0.75rem', color: '#666', fontSize: '0.9rem' }}>{r.reason}</span>
-                  </div>
-                  <button onClick={() => unblockRange(r)} style={{ padding: '0.3rem 0.75rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer' }}>Unblock</button>
-                </div>
-              ))}
-            </>
-          )}
-
-          <h2 style={{ color: '#fff', marginTop: '2rem' }}>Block Time Slots</h2>
-          <div style={{ border: '1px solid #333', borderRadius: '8px', padding: '1.5rem', marginBottom: '1rem', background: '#2a2a2a' }}>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>Date</label>
-              <input type="date" value={blockSlotDate} onChange={e => setBlockSlotDate(e.target.value)}
-                style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', boxSizing: 'border-box' }} />
+          {/* Week navigator */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <button onClick={() => setBlockWeekOffset(w => w - 1)}
+              style={{ padding: '0.4rem 1rem', background: '#2a2a2a', color: '#fff', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer' }}>← Prev</button>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>{formatBlockWeekLabel()}</div>
+              {blockWeekOffset === 0 && <div style={{ color: '#cc0000', fontSize: '0.7rem', marginTop: '2px' }}>THIS WEEK</div>}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>From</label>
-                <select value={blockSlotHour} onChange={e => setBlockSlotHour(Number(e.target.value))}
-                  style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }}>
-                  {HOURS.map(h => <option key={h} value={h}>{formatHour(h)}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>To</label>
-                <select value={blockSlotEndHour} onChange={e => setBlockSlotEndHour(Number(e.target.value))}
-                  style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }}>
-                  {HOURS.filter(h => h >= blockSlotHour).map(h => <option key={h} value={h}>{formatHour(h)}</option>)}
-                </select>
-              </div>
-            </div>
-            <input type="text" placeholder="Reason (optional)" value={blockSlotReason} onChange={e => setBlockSlotReason(e.target.value)}
-              style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', marginBottom: '1rem', boxSizing: 'border-box' }} />
-            <button onClick={blockSingleSlot} style={{ padding: '0.75rem 1.5rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
-              Block These Slots
-            </button>
+            <button onClick={() => setBlockWeekOffset(w => w + 1)}
+              style={{ padding: '0.4rem 1rem', background: '#2a2a2a', color: '#fff', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer' }}>Next →</button>
           </div>
 
-          {blockedSlots.length > 0 && (
-            <>
-              <h3 style={{ color: '#fff' }}>Currently Blocked Slots</h3>
-              {blockedSlots.map(s => (
-                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #cc0000', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.5rem', background: '#2a1a1a' }}>
-                  <div>
-                    <strong style={{ color: '#fff' }}>{s.slot_date} at {formatHour(s.start_hour)}</strong>
-                    {s.block_reason && <span style={{ marginLeft: '0.75rem', color: '#666', fontSize: '0.9rem' }}>{s.block_reason}</span>}
-                  </div>
-                  <button onClick={() => unblockSlot(s)} style={{ padding: '0.3rem 0.75rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer' }}>Unblock</button>
-                </div>
-              ))}
-            </>
-          )}
+          {/* Block calendar grid */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: '70px', color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', padding: '0.4rem 0.5rem', textAlign: 'left', borderBottom: '1px solid #333' }}>Time</th>
+                  {blockWeekDates.map(date => {
+                    const isToday = date === today.toISOString().split('T')[0]
+                    const d = new Date(date + 'T00:00:00')
+                    return (
+                      <th key={date} style={{ color: isToday ? '#cc0000' : '#ccc', fontSize: '0.72rem', textTransform: 'uppercase', padding: '0.4rem 0.3rem', textAlign: 'center', borderBottom: '1px solid #333', background: isToday ? '#1a0000' : 'transparent' }}>
+                        <div>{DAY_NAMES_FULL[d.getDay()]}</div>
+                        <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: isToday ? '#cc0000' : '#fff' }}>{d.getDate()}</div>
+                      </th>
+                    )
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {HOURS.map(hour => (
+                  <tr key={hour}>
+                    <td style={{ color: '#555', fontSize: '0.72rem', padding: '0.3rem 0.5rem', borderBottom: '1px solid #1f1f1f', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                      {formatHour(hour)}
+                    </td>
+                    {blockWeekDates.map(date => {
+                      const slot = getBlockCellSlot(date, hour)
+                      const blocked = slot?.is_blocked
+                      const isToday = date === today.toISOString().split('T')[0]
+                      return (
+                        <td key={date} style={{ padding: '0.25rem', borderBottom: '1px solid #1f1f1f', background: isToday ? '#0d0000' : 'transparent' }}>
+                          {slot ? (
+                            <button
+                              onClick={() => toggleBlockCell(slot)}
+                              title={blocked ? `Click to unblock${slot.block_reason ? ': ' + slot.block_reason : ''}` : 'Click to block'}
+                              style={{
+                                width: '100%', minHeight: '36px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                                background: blocked ? '#4a0000' : '#1a1a1a',
+                                outline: blocked ? '1px solid #cc0000' : '1px solid #2a2a2a',
+                                color: blocked ? '#cc4444' : '#333',
+                                fontSize: '0.7rem', fontWeight: blocked ? 'bold' : 'normal',
+                                transition: 'all 0.1s',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.outline = '1px solid #cc0000'; e.currentTarget.style.color = blocked ? '#ff6666' : '#cc0000' }}
+                              onMouseLeave={e => { e.currentTarget.style.outline = blocked ? '1px solid #cc0000' : '1px solid #2a2a2a'; e.currentTarget.style.color = blocked ? '#cc4444' : '#333' }}
+                            >
+                              {blocked ? '🔒' : ''}
+                            </button>
+                          ) : (
+                            <div style={{ minHeight: '36px', background: '#111', borderRadius: '4px', opacity: 0.3 }} />
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </main>
