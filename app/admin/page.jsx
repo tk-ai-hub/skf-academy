@@ -77,6 +77,10 @@ export default function Admin() {
   const [bookModalSlot, setBookModalSlot] = useState(null)
   const [bookModalSearch, setBookModalSearch] = useState('')
   const [bookModalStudent, setBookModalStudent] = useState(null)
+  const [bookModalIsGuest, setBookModalIsGuest] = useState(false)
+  const [bookModalGuestFirst, setBookModalGuestFirst] = useState('')
+  const [bookModalGuestLast, setBookModalGuestLast] = useState('')
+  const [bookModalGuestPhone, setBookModalGuestPhone] = useState('')
   const [bookModalProcessing, setBookModalProcessing] = useState(false)
   const [bookModalSuccess, setBookModalSuccess] = useState(false)
   const [blockWeekOffset, setBlockWeekOffset] = useState(0)
@@ -216,6 +220,10 @@ export default function Admin() {
     setBookModalSlot(null)
     setBookModalSearch('')
     setBookModalStudent(null)
+    setBookModalIsGuest(false)
+    setBookModalGuestFirst('')
+    setBookModalGuestLast('')
+    setBookModalGuestPhone('')
     setBookModalProcessing(false)
     setBookModalSuccess(false)
     const { data } = await supabase.from('slots').select('id').eq('slot_date', date).eq('start_hour', hour).single()
@@ -227,16 +235,25 @@ export default function Admin() {
     setBookModalSlot(null)
     setBookModalSearch('')
     setBookModalStudent(null)
+    setBookModalIsGuest(false)
+    setBookModalGuestFirst('')
+    setBookModalGuestLast('')
+    setBookModalGuestPhone('')
     setBookModalSuccess(false)
   }
 
   async function confirmBookModal() {
-    if (!bookModalStudent || !bookModalSlot || bookModalProcessing) return
+    if (!bookModalSlot || bookModalProcessing) return
+    if (!bookModalIsGuest && !bookModalStudent) return
+    if (bookModalIsGuest && !bookModalGuestFirst.trim()) return
     setBookModalProcessing(true)
+    const payload = bookModalIsGuest
+      ? { slotId: bookModalSlot.id, guestFirstName: bookModalGuestFirst.trim(), guestLastName: bookModalGuestLast.trim(), guestPhone: bookModalGuestPhone.trim() }
+      : { slotId: bookModalSlot.id, studentId: bookModalStudent.id }
     const res = await fetch('/api/admin-book', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slotId: bookModalSlot.id, studentId: bookModalStudent.id })
+      body: JSON.stringify(payload)
     })
     setBookModalProcessing(false)
     if (res.ok) {
@@ -717,37 +734,80 @@ export default function Admin() {
                   <button onClick={closeBookModal} style={{ background: 'none', border: 'none', color: '#555', fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
                 </div>
 
-                <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
-                  <input
-                    autoFocus
-                    type="text"
-                    placeholder="Search client by name or phone..."
-                    value={bookModalSearch}
-                    onChange={e => { setBookModalSearch(e.target.value); setBookModalStudent(null) }}
-                    style={{ width: '100%', padding: '0.65rem 0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
-                  />
-                  {!bookModalStudent && bookModalFiltered.length > 0 && bookModalSearch.trim() && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#111', border: '1px solid #333', borderRadius: '0 0 6px 6px', zIndex: 10, maxHeight: '220px', overflowY: 'auto' }}>
-                      {bookModalFiltered.map(s => (
-                        <div
-                          key={s.id}
-                          onClick={() => { setBookModalStudent(s); setBookModalSearch(studentName(s)) }}
-                          style={{ padding: '0.65rem 0.9rem', cursor: 'pointer', borderBottom: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between' }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#2a2a2a'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                        >
-                          <span style={{ color: '#fff' }}>{studentName(s)}</span>
-                          <span style={{ color: '#555', fontSize: '0.85rem' }}>{s.phone || ''}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                {/* Client / Guest toggle */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  {['Client', 'Guest'].map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => { setBookModalIsGuest(mode === 'Guest'); setBookModalStudent(null); setBookModalSearch('') }}
+                      style={{
+                        flex: 1, padding: '0.5rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold',
+                        background: (mode === 'Guest') === bookModalIsGuest ? '#cc0000' : '#2a2a2a',
+                        color: '#fff'
+                      }}
+                    >{mode}</button>
+                  ))}
                 </div>
 
-                {bookModalStudent && (
-                  <div style={{ background: '#2a0000', border: '1px solid #cc0000', borderRadius: '6px', padding: '0.6rem 0.9rem', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#fff', fontWeight: 'bold' }}>{studentName(bookModalStudent)}</span>
-                    <button onClick={() => { setBookModalStudent(null); setBookModalSearch('') }} style={{ background: 'none', border: 'none', color: '#884444', cursor: 'pointer', fontSize: '1.1rem' }}>×</button>
+                {!bookModalIsGuest ? (
+                  <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Search by name or phone..."
+                      value={bookModalSearch}
+                      onChange={e => { setBookModalSearch(e.target.value); setBookModalStudent(null) }}
+                      style={{ width: '100%', padding: '0.65rem 0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                    />
+                    {!bookModalStudent && bookModalFiltered.length > 0 && bookModalSearch.trim() && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#111', border: '1px solid #333', borderRadius: '0 0 6px 6px', zIndex: 10, maxHeight: '220px', overflowY: 'auto' }}>
+                        {bookModalFiltered.map(s => (
+                          <div
+                            key={s.id}
+                            onClick={() => { setBookModalStudent(s); setBookModalSearch(studentName(s)) }}
+                            style={{ padding: '0.65rem 0.9rem', cursor: 'pointer', borderBottom: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#2a2a2a'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <span style={{ color: '#fff' }}>{studentName(s)}</span>
+                            <span style={{ color: '#555', fontSize: '0.85rem' }}>{s.phone || ''}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {bookModalStudent && (
+                      <div style={{ marginTop: '0.5rem', background: '#2a0000', border: '1px solid #cc0000', borderRadius: '6px', padding: '0.5rem 0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#fff', fontWeight: 'bold' }}>{studentName(bookModalStudent)}</span>
+                        <button onClick={() => { setBookModalStudent(null); setBookModalSearch('') }} style={{ background: 'none', border: 'none', color: '#884444', cursor: 'pointer', fontSize: '1.1rem' }}>×</button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', gap: '0.6rem' }}>
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="First name *"
+                        value={bookModalGuestFirst}
+                        onChange={e => setBookModalGuestFirst(e.target.value)}
+                        style={{ flex: 1, padding: '0.6rem 0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.9rem' }}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Last name"
+                        value={bookModalGuestLast}
+                        onChange={e => setBookModalGuestLast(e.target.value)}
+                        style={{ flex: 1, padding: '0.6rem 0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.9rem' }}
+                      />
+                    </div>
+                    <input
+                      type="tel"
+                      placeholder="Phone (optional)"
+                      value={bookModalGuestPhone}
+                      onChange={e => setBookModalGuestPhone(e.target.value)}
+                      style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                    />
                   </div>
                 )}
 
@@ -764,12 +824,12 @@ export default function Admin() {
                   </button>
                   <button
                     onClick={confirmBookModal}
-                    disabled={!bookModalStudent || !bookModalSlot || bookModalProcessing}
+                    disabled={!bookModalSlot || bookModalProcessing || (!bookModalIsGuest && !bookModalStudent) || (bookModalIsGuest && !bookModalGuestFirst.trim())}
                     style={{
                       flex: 2, padding: '0.7rem', borderRadius: '6px', border: 'none',
-                      background: bookModalStudent && bookModalSlot ? '#cc0000' : '#333',
-                      color: bookModalStudent && bookModalSlot ? '#fff' : '#666',
-                      cursor: bookModalStudent && bookModalSlot ? 'pointer' : 'not-allowed',
+                      background: (bookModalSlot && ((!bookModalIsGuest && bookModalStudent) || (bookModalIsGuest && bookModalGuestFirst.trim()))) ? '#cc0000' : '#333',
+                      color: (bookModalSlot && ((!bookModalIsGuest && bookModalStudent) || (bookModalIsGuest && bookModalGuestFirst.trim()))) ? '#fff' : '#666',
+                      cursor: (bookModalSlot && ((!bookModalIsGuest && bookModalStudent) || (bookModalIsGuest && bookModalGuestFirst.trim()))) ? 'pointer' : 'not-allowed',
                       fontWeight: 'bold', fontSize: '0.95rem'
                     }}
                   >
