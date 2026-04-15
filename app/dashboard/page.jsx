@@ -8,12 +8,19 @@ function formatHour(h) {
   return `${h - 12}:00 PM`
 }
 
+function formatDate(d) {
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+}
+
 export default function Dashboard() {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [bookings, setBookings] = useState([])
   const [balance, setBalance] = useState(0)
-  const [cancelPrompt, setCancelPrompt] = useState(null) // { booking, isRecurring }
+  const [cancelPrompt, setCancelPrompt] = useState(null)
+  const [activeTab, setActiveTab] = useState('upcoming')
+
+  const today = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
     async function load() {
@@ -49,13 +56,14 @@ export default function Dashboard() {
     load()
   }, [])
 
+  const upcomingBookings = bookings.filter(b => b.slots.slot_date >= today)
+  const pastBookings = bookings.filter(b => b.slots.slot_date < today)
+    .sort((a, b) => b.slots.slot_date.localeCompare(a.slots.slot_date) || b.slots.start_hour - a.slots.start_hour)
+
   function handleCancelClick(booking) {
-    if (booking.slots.slot_date < new Date().toISOString().split("T")[0]) { alert("Cannot cancel a past lesson."); return }
-    if (booking.slots.slot_date < new Date().toISOString().split("T")[0]) { alert("Cannot cancel a past lesson."); return }
-    if (booking.slots.slot_date < new Date().toISOString().split("T")[0]) { alert("Cannot cancel a past lesson."); return }
+    if (booking.slots.slot_date < today) return // past — no cancel
     if (booking.is_recurring && booking.recurring_group_id) {
-      // Check if there are other bookings in the same recurring group
-      const seriesBookings = bookings.filter(
+      const seriesBookings = upcomingBookings.filter(
         b => b.recurring_group_id === booking.recurring_group_id && b.id !== booking.id
       )
       if (seriesBookings.length > 0) {
@@ -63,7 +71,6 @@ export default function Dashboard() {
         return
       }
     }
-    // Single or last in series — just cancel directly
     doCancel(booking, false)
   }
 
@@ -74,11 +81,11 @@ export default function Dashboard() {
       : user.email
 
     if (cancelSeries && booking.recurring_group_id) {
-      // Cancel all future bookings in this recurring group
-      const seriesBookings = bookings.filter(
+      // Only cancel future bookings — never past ones
+      const futureInSeries = upcomingBookings.filter(
         b => b.recurring_group_id === booking.recurring_group_id
       )
-      for (const b of seriesBookings) {
+      for (const b of futureInSeries) {
         await supabase.from('bookings')
           .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
           .eq('id', b.id)
@@ -103,11 +110,11 @@ export default function Dashboard() {
           })
         })
       }
-      const refundAmount = seriesBookings.length
-      setBookings(prev => prev.filter(b => b.recurring_group_id !== booking.recurring_group_id))
-      setBalance(prev => prev + refundAmount)
+      setBookings(prev => prev.filter(b =>
+        !(b.recurring_group_id === booking.recurring_group_id && b.slots.slot_date >= today)
+      ))
+      setBalance(prev => prev + futureInSeries.length)
     } else {
-      // Cancel single occurrence
       await supabase.from('bookings')
         .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
         .eq('id', booking.id)
@@ -136,15 +143,14 @@ export default function Dashboard() {
     }
   }
 
-  // Group bookings: show recurring series grouped with a header
-  function groupBookings(bookings) {
+  function groupBookings(list) {
     const seen = new Set()
     const result = []
-    for (const b of bookings) {
+    for (const b of list) {
       if (b.is_recurring && b.recurring_group_id) {
         if (!seen.has(b.recurring_group_id)) {
           seen.add(b.recurring_group_id)
-          const series = bookings.filter(x => x.recurring_group_id === b.recurring_group_id)
+          const series = list.filter(x => x.recurring_group_id === b.recurring_group_id)
           result.push({ type: 'series', groupId: b.recurring_group_id, bookings: series })
         }
       } else {
@@ -154,10 +160,23 @@ export default function Dashboard() {
     return result
   }
 
-  const grouped = groupBookings(bookings)
+  const upcomingGrouped = groupBookings(upcomingBookings)
+  const pastGrouped = groupBookings(pastBookings)
+
   const displayName = profile?.first_name
     ? `${profile.first_name} ${profile.last_name || ''}`.trim()
     : user?.email
+
+  const tabStyle = (tab) => ({
+    padding: '0.5rem 1.25rem',
+    background: activeTab === tab ? '#cc0000' : 'transparent',
+    color: activeTab === tab ? '#fff' : '#666',
+    border: activeTab === tab ? '1px solid #cc0000' : '1px solid #333',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '0.85rem',
+    fontWeight: activeTab === tab ? 'bold' : 'normal',
+  })
 
   return (
     <main>
@@ -211,87 +230,146 @@ export default function Dashboard() {
                 onClick={() => doCancel(cancelPrompt.booking, true)}
                 style={{ padding: '0.75rem', background: '#2a0000', color: '#fff', border: '1px solid #cc0000', borderRadius: '8px', cursor: 'pointer', textAlign: 'left' }}
               >
-                <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>All {cancelPrompt.seriesCount} lessons in this series</div>
+                <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>All remaining lessons in this series</div>
                 <div style={{ color: '#cc6666', fontSize: '0.8rem' }}>
-                  Cancels the entire recurring schedule — refund {cancelPrompt.seriesCount} tokens
+                  Cancels all future scheduled lessons — refund {cancelPrompt.seriesCount} tokens
                 </div>
               </button>
               <button
                 onClick={() => setCancelPrompt(null)}
                 style={{ padding: '0.6rem', background: 'transparent', color: '#666', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer' }}
-              >
-                Keep my booking
-              </button>
+              >Keep my booking</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Upcoming Lessons */}
-      <h2 style={{ color: '#fff', borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
-        Upcoming Lessons
-      </h2>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+        <button style={tabStyle('upcoming')} onClick={() => setActiveTab('upcoming')}>
+          Upcoming {upcomingBookings.length > 0 && <span style={{ background: '#cc0000', color: '#fff', borderRadius: '10px', padding: '1px 6px', fontSize: '0.75rem', marginLeft: '4px' }}>{upcomingBookings.length}</span>}
+        </button>
+        <button style={tabStyle('history')} onClick={() => setActiveTab('history')}>
+          History {pastBookings.length > 0 && <span style={{ background: '#444', color: '#ccc', borderRadius: '10px', padding: '1px 6px', fontSize: '0.75rem', marginLeft: '4px' }}>{pastBookings.length}</span>}
+        </button>
+      </div>
 
-      {grouped.length === 0 ? (
-        <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
-      ) : (
-        grouped.map((group, gi) => {
-          if (group.type === 'single') {
-            const b = group.booking
-            return (
-              <div key={b.id} style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1.1rem', color: '#fff' }}>
-                    {b.slots.slot_date} at {formatHour(b.slots.start_hour)}
-                  </p>
-                  <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.85rem' }}>Private Lesson</p>
-                </div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <a href="/book" style={{ padding: '0.4rem 1rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '0.9rem' }}>Reschedule</a>
-                  <button onClick={() => handleCancelClick(b)} style={{ padding: '0.4rem 1rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem' }}>Cancel</button>
-                </div>
-              </div>
-            )
-          }
-
-          // Recurring series group
-          const { bookings: series, groupId } = group
-          return (
-            <div key={groupId} style={{ border: '1px solid #444', borderRadius: '10px', marginBottom: '1.25rem', overflow: 'hidden' }}>
-              <div style={{ background: '#2a1a1a', borderBottom: '1px solid #333', padding: '0.6rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ color: '#cc0000', fontSize: '0.8rem' }}>🔁</span>
-                  <span style={{ color: '#cc0000', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>
-                    Weekly Recurring — {formatHour(series[0].slots.start_hour)}
-                  </span>
-                </div>
-                <span style={{ color: '#666', fontSize: '0.8rem' }}>{series.length} lessons</span>
-              </div>
-              {series.map((b, i) => (
-                <div key={b.id} style={{
-                  background: i % 2 === 0 ? '#222' : '#1e1e1e',
-                  padding: '0.75rem 1.25rem',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  borderBottom: i < series.length - 1 ? '1px solid #2a2a2a' : 'none'
-                }}>
-                  <div>
-                    <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>{b.slots.slot_date}</span>
-                    <span style={{ color: '#666', fontSize: '0.85rem', marginLeft: '0.5rem' }}>at {formatHour(b.slots.start_hour)}</span>
+      {/* ── UPCOMING TAB ── */}
+      {activeTab === 'upcoming' && (
+        <>
+          {upcomingGrouped.length === 0 ? (
+            <p style={{ color: '#666' }}>No upcoming lessons booked.</p>
+          ) : (
+            upcomingGrouped.map((group) => {
+              if (group.type === 'single') {
+                const b = group.booking
+                return (
+                  <div key={b.id} style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1.05rem', color: '#fff' }}>
+                        {formatDate(b.slots.slot_date)}
+                      </p>
+                      <p style={{ margin: '0.2rem 0 0', color: '#cc0000', fontSize: '0.85rem' }}>{formatHour(b.slots.start_hour)} · Private Lesson</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                      <a href="/book" style={{ padding: '0.4rem 1rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '0.85rem' }}>Reschedule</a>
+                      <button onClick={() => handleCancelClick(b)} style={{ padding: '0.4rem 1rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleCancelClick(b)}
-                    style={{ padding: '0.3rem 0.75rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
-                  >Cancel</button>
+                )
+              }
+
+              const { bookings: series, groupId } = group
+              return (
+                <div key={groupId} style={{ border: '1px solid #444', borderRadius: '10px', marginBottom: '1.25rem', overflow: 'hidden' }}>
+                  <div style={{ background: '#2a1a1a', borderBottom: '1px solid #333', padding: '0.6rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ color: '#cc0000', fontSize: '0.8rem' }}>🔁</span>
+                      <span style={{ color: '#cc0000', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>
+                        Weekly Recurring — {formatHour(series[0].slots.start_hour)}
+                      </span>
+                    </div>
+                    <span style={{ color: '#666', fontSize: '0.8rem' }}>{series.length} lessons</span>
+                  </div>
+                  {series.map((b, i) => (
+                    <div key={b.id} style={{
+                      background: i % 2 === 0 ? '#222' : '#1e1e1e',
+                      padding: '0.75rem 1.25rem',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      borderBottom: i < series.length - 1 ? '1px solid #2a2a2a' : 'none'
+                    }}>
+                      <div>
+                        <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>{formatDate(b.slots.slot_date)}</span>
+                        <span style={{ color: '#666', fontSize: '0.85rem', marginLeft: '0.5rem' }}>at {formatHour(b.slots.start_hour)}</span>
+                      </div>
+                      <button
+                        onClick={() => handleCancelClick(b)}
+                        style={{ padding: '0.3rem 0.75rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
+                      >Cancel</button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )
-        })
+              )
+            })
+          )}
+
+          <a href="/book" style={{ display: 'inline-block', marginTop: '1rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
+            + Book a Lesson
+          </a>
+        </>
       )}
 
-      <a href="/book" style={{ display: 'inline-block', marginTop: '1.5rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
-        + Book a Lesson
-      </a>
+      {/* ── HISTORY TAB ── */}
+      {activeTab === 'history' && (
+        <>
+          {pastGrouped.length === 0 ? (
+            <p style={{ color: '#666' }}>No past lessons yet.</p>
+          ) : (
+            pastGrouped.map((group) => {
+              if (group.type === 'single') {
+                const b = group.booking
+                return (
+                  <div key={b.id} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.75 }}>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1rem', color: '#aaa' }}>
+                        {formatDate(b.slots.slot_date)}
+                      </p>
+                      <p style={{ margin: '0.2rem 0 0', color: '#555', fontSize: '0.85rem' }}>{formatHour(b.slots.start_hour)} · Private Lesson</p>
+                    </div>
+                    <span style={{ color: '#444', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Completed</span>
+                  </div>
+                )
+              }
+
+              const { bookings: series, groupId } = group
+              return (
+                <div key={groupId} style={{ border: '1px solid #2a2a2a', borderRadius: '10px', marginBottom: '1.25rem', overflow: 'hidden', opacity: 0.75 }}>
+                  <div style={{ background: '#1a1a1a', borderBottom: '1px solid #2a2a2a', padding: '0.6rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ color: '#555', fontSize: '0.8rem' }}>🔁</span>
+                      <span style={{ color: '#555', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                        Weekly Recurring — {formatHour(series[0].slots.start_hour)}
+                      </span>
+                    </div>
+                    <span style={{ color: '#444', fontSize: '0.8rem' }}>{series.length} lessons</span>
+                  </div>
+                  {series.map((b, i) => (
+                    <div key={b.id} style={{
+                      background: i % 2 === 0 ? '#161616' : '#131313',
+                      padding: '0.65rem 1.25rem',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      borderBottom: i < series.length - 1 ? '1px solid #1f1f1f' : 'none'
+                    }}>
+                      <span style={{ color: '#777', fontSize: '0.9rem' }}>{formatDate(b.slots.slot_date)} · {formatHour(b.slots.start_hour)}</span>
+                      <span style={{ color: '#444', fontSize: '0.75rem', textTransform: 'uppercase' }}>Completed</span>
+                    </div>
+                  ))}
+                </div>
+              )
+            })
+          )}
+        </>
+      )}
     </main>
   )
 }
