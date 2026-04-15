@@ -65,6 +65,7 @@ export default function Admin() {
   const [blockedSlots, setBlockedSlots] = useState([])
   const [blockSlotDate, setBlockSlotDate] = useState('')
   const [blockSlotHour, setBlockSlotHour] = useState(10)
+  const [blockSlotEndHour, setBlockSlotEndHour] = useState(10)
   const [blockSlotReason, setBlockSlotReason] = useState('')
 
   // Weekly calendar state
@@ -163,10 +164,17 @@ export default function Admin() {
 
   async function blockSingleSlot() {
     if (!blockSlotDate) { setMessage('Please select a date.'); return }
+    const endHour = Math.max(blockSlotHour, blockSlotEndHour)
+    const startHour = Math.min(blockSlotHour, blockSlotEndHour)
     await supabase.from('slots')
       .update({ is_blocked: true, block_reason: blockSlotReason || 'Unavailable' })
-      .eq('slot_date', blockSlotDate).eq('start_hour', blockSlotHour)
-    setMessage(`${blockSlotDate} at ${formatHour(blockSlotHour)} blocked.`)
+      .eq('slot_date', blockSlotDate)
+      .gte('start_hour', startHour)
+      .lte('start_hour', endHour)
+    const label = startHour === endHour
+      ? `${blockSlotDate} at ${formatHour(startHour)}`
+      : `${blockSlotDate} from ${formatHour(startHour)} to ${formatHour(endHour)}`
+    setMessage(`${label} blocked.`)
     setBlockSlotDate(''); setBlockSlotReason('')
     loadData()
   }
@@ -491,26 +499,33 @@ export default function Admin() {
             </>
           )}
 
-          <h2 style={{ color: '#fff', marginTop: '2rem' }}>Block Single Time Slot</h2>
+          <h2 style={{ color: '#fff', marginTop: '2rem' }}>Block Time Slots</h2>
           <div style={{ border: '1px solid #333', borderRadius: '8px', padding: '1.5rem', marginBottom: '1rem', background: '#2a2a2a' }}>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>Date</label>
+              <input type="date" value={blockSlotDate} onChange={e => setBlockSlotDate(e.target.value)}
+                style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', boxSizing: 'border-box' }} />
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>Date</label>
-                <input type="date" value={blockSlotDate} onChange={e => setBlockSlotDate(e.target.value)}
-                  style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>Time</label>
+                <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>From</label>
                 <select value={blockSlotHour} onChange={e => setBlockSlotHour(Number(e.target.value))}
                   style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }}>
                   {HOURS.map(h => <option key={h} value={h}>{formatHour(h)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.25rem', color: '#999', fontSize: '0.8rem', textTransform: 'uppercase' }}>To</label>
+                <select value={blockSlotEndHour} onChange={e => setBlockSlotEndHour(Number(e.target.value))}
+                  style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff' }}>
+                  {HOURS.filter(h => h >= blockSlotHour).map(h => <option key={h} value={h}>{formatHour(h)}</option>)}
                 </select>
               </div>
             </div>
             <input type="text" placeholder="Reason (optional)" value={blockSlotReason} onChange={e => setBlockSlotReason(e.target.value)}
               style={{ width: '100%', padding: '0.5rem', background: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', marginBottom: '1rem', boxSizing: 'border-box' }} />
             <button onClick={blockSingleSlot} style={{ padding: '0.75rem 1.5rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
-              Block This Slot
+              Block These Slots
             </button>
           </div>
 
