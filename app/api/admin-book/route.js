@@ -71,7 +71,7 @@ export async function POST(request) {
     })
     if (authError) return Response.json({ error: 'Could not create guest user: ' + authError.message }, { status: 500 })
 
-    const { error: insertError } = await supabaseAdmin.from('users').insert({
+    const { error: insertError } = await supabaseAdmin.from('users').upsert({
       id: authData.user.id,
       tenant_id: slot.tenant_id,
       email,
@@ -80,7 +80,7 @@ export async function POST(request) {
       full_name: fullName,
       phone: guestPhone || '',
       role: 'student'
-    })
+    }, { onConflict: 'id' })
     if (insertError) return Response.json({ error: 'Could not create guest profile: ' + insertError.message }, { status: 500 })
 
     userId = authData.user.id
