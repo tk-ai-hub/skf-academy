@@ -730,6 +730,11 @@ export default function Admin() {
       {/* ── STUDENTS TAB ── */}
       {activeTab === 'students' && (
         <div>
+          <button
+            onClick={() => { setAddStudentModal(true); setAddStudentForm({}); setAddStudentError('') }}
+            style={{ display: 'block', width: '100%', padding: '0.85rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', marginBottom: '1.5rem' }}
+          >+ Add Student</button>
+
           {upcomingBirthdays.length > 0 && (
             <>
               <h2 style={{ color: '#fff', marginTop: 0 }}>🎂 Upcoming Birthdays</h2>
