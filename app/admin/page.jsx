@@ -526,22 +526,27 @@ export default function Admin() {
         <button style={tabStyle('bookings')} onClick={() => setActiveTab('bookings')}>📋 All Bookings</button>
         <button style={tabStyle('students')} onClick={() => setActiveTab('students')}>👥 Students</button>
         <button style={tabStyle('block')} onClick={() => setActiveTab('block')}>🔒 Block Dates</button>
-        <a href="/admin/book" style={{
-          marginLeft: 'auto',
-          padding: '0.5rem 1.1rem',
-          background: '#cc0000',
-          color: '#fff',
-          border: '1px solid #cc0000',
-          borderRadius: '6px',
-          cursor: 'pointer',
-          fontSize: '0.85rem',
-          fontWeight: 'bold',
-          letterSpacing: '0.5px',
-          textDecoration: 'none',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.4rem'
-        }}>+ Book Lesson</a>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            onClick={() => { setAddStudentModal(true); setAddStudentForm({}); setAddStudentError('') }}
+            style={{ padding: '0.5rem 1.1rem', background: '#2a2a2a', color: '#fff', border: '1px solid #555', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '0.5px' }}
+          >+ Add Student</button>
+          <a href="/admin/book" style={{
+            padding: '0.5rem 1.1rem',
+            background: '#cc0000',
+            color: '#fff',
+            border: '1px solid #cc0000',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '0.85rem',
+            fontWeight: 'bold',
+            letterSpacing: '0.5px',
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.4rem'
+          }}>+ Book Lesson</a>
+        </div>
       </div>
 
       {/* ── WEEK VIEW TAB ── */}
@@ -738,13 +743,7 @@ export default function Admin() {
             </>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ color: '#fff', margin: 0 }}>Students ({students.length})</h2>
-            <button
-              onClick={() => { setAddStudentModal(true); setAddStudentForm({}); setAddStudentError('') }}
-              style={{ padding: '0.5rem 1rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
-            >+ Add Student</button>
-          </div>
+          <h2 style={{ color: '#fff' }}>Students ({students.length})</h2>
           {students.length === 0 ? (
             <p style={{ color: '#666' }}>No students yet.</p>
           ) : (
