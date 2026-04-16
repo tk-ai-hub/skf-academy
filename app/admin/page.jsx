@@ -390,6 +390,16 @@ export default function Admin() {
     return weekBookings.filter(b => b.slots?.slot_date === date && b.slots?.start_hour === hour)
   }
 
+  function getBlockedInfo(date, hour) {
+    // Check full-day range blocks
+    const range = blockedRanges.find(r => date >= r.start_date && date <= r.end_date)
+    if (range) return range.reason || 'Unavailable'
+    // Check individual hour blocks
+    const slot = blockedSlots.find(s => s.slot_date === date && s.start_hour === hour)
+    if (slot) return slot.block_reason || 'Unavailable'
+    return null
+  }
+
   function formatWeekLabel() {
     const s = new Date(weekStart + 'T00:00:00')
     const e = new Date(weekEnd + 'T00:00:00')
@@ -521,16 +531,32 @@ export default function Admin() {
                     </td>
                     {weekDates.map(date => {
                       const cellBookings = getBookingsForCell(date, hour)
+                      const blockedReason = getBlockedInfo(date, hour)
                       const isToday = date === today.toISOString().split('T')[0]
                       return (
                         <td key={date} style={{
                           padding: '0.3rem',
                           borderBottom: '1px solid #1f1f1f',
-                          background: isToday ? '#0d0000' : 'transparent',
+                          background: blockedReason ? '#111' : isToday ? '#0d0000' : 'transparent',
                           verticalAlign: 'top',
                           minHeight: '48px'
                         }}>
-                          {cellBookings.length > 0 ? (
+                          {blockedReason ? (
+                            <div style={{
+                              background: 'repeating-linear-gradient(45deg, #1a1a1a, #1a1a1a 4px, #141414 4px, #141414 8px)',
+                              border: '1px solid #2a2a2a',
+                              borderRadius: '5px',
+                              padding: '0.3rem 0.4rem',
+                              minHeight: '42px',
+                              display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+                              gap: '2px'
+                            }}>
+                              <span style={{ fontSize: '0.7rem' }}>🔒</span>
+                              <span style={{ color: '#555', fontSize: '0.62rem', textAlign: 'center', lineHeight: 1.2 }}>
+                                {blockedReason}
+                              </span>
+                            </div>
+                          ) : cellBookings.length > 0 ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               {cellBookings.map(booking => (
                                 <div key={booking.id} style={{
