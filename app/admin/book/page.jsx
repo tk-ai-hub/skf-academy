@@ -71,6 +71,10 @@ export default function AdminBook() {
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedSlots, setSelectedSlots] = useState([]) // multi-select
 
+  // Recurring
+  const [recurringEnabled, setRecurringEnabled] = useState(false)
+  const [recurringWeeks, setRecurringWeeks] = useState(4)
+
   // UI state
   const [message, setMessage] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -181,10 +185,15 @@ export default function AdminBook() {
   }
 
   function toggleSlot(slot) {
-    setSelectedSlots(prev => {
-      const exists = prev.find(s => s.id === slot.id)
-      return exists ? prev.filter(s => s.id !== slot.id) : [...prev, slot]
-    })
+    if (recurringEnabled) {
+      // Recurring mode: only one slot allowed
+      setSelectedSlots(prev => prev.find(s => s.id === slot.id) ? [] : [slot])
+    } else {
+      setSelectedSlots(prev => {
+        const exists = prev.find(s => s.id === slot.id)
+        return exists ? prev.filter(s => s.id !== slot.id) : [...prev, slot]
+      })
+    }
   }
 
   function goToStep3() {
@@ -202,6 +211,31 @@ export default function AdminBook() {
       ? { guestFirstName: guestFirstName.trim(), guestLastName: guestLastName.trim(), guestPhone: guestPhone.trim() }
       : { studentId: selectedStudent.id }
 
+    // Recurring mode: single API call, server handles all weekly slots
+    if (recurringEnabled) {
+      const slot = selectedSlots[0]
+      try {
+        const res = await fetch('/api/admin-book', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slotId: slot.id, recurring: true, weeks: recurringWeeks, ...clientPayload })
+        })
+        const data = await res.json()
+        setIsProcessing(false)
+        if (!res.ok) {
+          setMessage('Error: ' + (data.error || 'Booking failed'))
+        } else {
+          setSuccess({ studentName: data.studentName, recurring: true, recurringWeeks, baseSlot: slot, booked: [], failed: [] })
+          setSlots(prev => prev.filter(s => s.id !== slot.id))
+        }
+      } catch (err) {
+        setIsProcessing(false)
+        setMessage('Error: ' + err.message)
+      }
+      return
+    }
+
+    // Standard multi-select mode
     const results = []
     let studentName = ''
     let lastError = ''
@@ -220,7 +254,6 @@ export default function AdminBook() {
         } else {
           studentName = data.studentName
           results.push({ slot, ok: true })
-          // Once guest is created on first call, switch to studentId for subsequent calls
           if (isNewClient && data.studentId && !clientPayload.studentId) {
             clientPayload.studentId = data.studentId
             delete clientPayload.guestFirstName
@@ -255,6 +288,8 @@ export default function AdminBook() {
     setGuestLastName('')
     setGuestPhone('')
     setIsNewClient(false)
+    setRecurringEnabled(false)
+    setRecurringWeeks(4)
     setMessage('')
   }
 
@@ -277,23 +312,37 @@ export default function AdminBook() {
         <div style={{ ...cardStyle, border: '1px solid #2a8a4e' }}>
           <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>✅</div>
-            <h3 style={{ color: '#fff', margin: '0 0 0.25rem' }}>{success.booked.length} Lesson{success.booked.length > 1 ? 's' : ''} Booked</h3>
+            <h3 style={{ color: '#fff', margin: '0 0 0.25rem' }}>
+              {success.recurring ? `${success.recurringWeeks} Recurring Lessons Booked` : `${success.booked.length} Lesson${success.booked.length > 1 ? 's' : ''} Booked`}
+            </h3>
             <p style={{ color: '#ccc', margin: 0 }}><strong style={{ color: '#fff' }}>{success.studentName}</strong></p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.25rem' }}>
-            {success.booked.sort((a,b) => a.slot_date.localeCompare(b.slot_date)).map(slot => (
-              <div key={slot.id} style={{ background: '#0a1f0a', border: '1px solid #2a6a2a', borderRadius: '6px', padding: '0.5rem 0.9rem', display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#fff', fontSize: '0.9rem' }}>{formatDate(slot.slot_date)}</span>
-                <span style={{ color: '#cc0000', fontWeight: 'bold', fontSize: '0.9rem' }}>{formatHour(slot.start_hour)}</span>
+          {success.recurring ? (
+            <div style={{ background: '#0a1f0a', border: '1px solid #2a6a2a', borderRadius: '6px', padding: '0.75rem 1rem', marginBottom: '1.25rem' }}>
+              <div style={{ color: '#66cc66', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.4rem' }}>Recurring Schedule</div>
+              <div style={{ color: '#fff', fontSize: '0.95rem' }}>
+                Every {new Date(success.baseSlot.slot_date + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'long' })} at {formatHour(success.baseSlot.start_hour)}
               </div>
-            ))}
-            {success.failed.length > 0 && success.failed.map(r => (
-              <div key={r.slot.id} style={{ background: '#1f0a0a', border: '1px solid #6a2a2a', borderRadius: '6px', padding: '0.5rem 0.9rem', display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#aaa', fontSize: '0.9rem' }}>{formatDate(r.slot.slot_date)} {formatHour(r.slot.start_hour)}</span>
-                <span style={{ color: '#cc6666', fontSize: '0.8rem' }}>Failed</span>
+              <div style={{ color: '#aaa', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                Starting {formatDate(success.baseSlot.slot_date)} · {success.recurringWeeks} weeks
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.25rem' }}>
+              {success.booked.sort((a,b) => a.slot_date.localeCompare(b.slot_date)).map(slot => (
+                <div key={slot.id} style={{ background: '#0a1f0a', border: '1px solid #2a6a2a', borderRadius: '6px', padding: '0.5rem 0.9rem', display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#fff', fontSize: '0.9rem' }}>{formatDate(slot.slot_date)}</span>
+                  <span style={{ color: '#cc0000', fontWeight: 'bold', fontSize: '0.9rem' }}>{formatHour(slot.start_hour)}</span>
+                </div>
+              ))}
+              {success.failed.length > 0 && success.failed.map(r => (
+                <div key={r.slot.id} style={{ background: '#1f0a0a', border: '1px solid #6a2a2a', borderRadius: '6px', padding: '0.5rem 0.9rem', display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#aaa', fontSize: '0.9rem' }}>{formatDate(r.slot.slot_date)} {formatHour(r.slot.start_hour)}</span>
+                  <span style={{ color: '#cc6666', fontSize: '0.8rem' }}>Failed</span>
+                </div>
+              ))}
+            </div>
+          )}
           <p style={{ color: '#666', fontSize: '0.85rem', margin: '0 0 1.25rem', textAlign: 'center' }}>Added to Google Calendar</p>
           <button onClick={bookAnother} style={{ width: '100%', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.75rem 2rem', cursor: 'pointer', fontSize: '1rem' }}>
             Book Another
@@ -482,11 +531,60 @@ export default function AdminBook() {
                 )}
               </div>
 
+              {/* Recurring toggle */}
+              <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                <div>
+                  <div style={{ color: '#fff', fontSize: '0.95rem', fontWeight: 'bold' }}>Recurring Weekly</div>
+                  <div style={{ color: '#666', fontSize: '0.8rem', marginTop: '0.2rem' }}>Book the same slot every week</div>
+                </div>
+                <button
+                  onClick={() => { setRecurringEnabled(e => !e); setSelectedSlots([]) }}
+                  style={{
+                    width: '48px', height: '26px', borderRadius: '13px', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0,
+                    background: recurringEnabled ? '#cc0000' : '#444', transition: 'background 0.2s'
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute', top: '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
+                    left: recurringEnabled ? '25px' : '3px'
+                  }} />
+                </button>
+              </div>
+
+              {recurringEnabled && (
+                <div style={cardStyle}>
+                  <label style={labelStyle}>Number of Weeks</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                    {[2, 4, 8, 12].map(w => (
+                      <button
+                        key={w}
+                        onClick={() => setRecurringWeeks(w)}
+                        style={{
+                          padding: '0.75rem 0.5rem', borderRadius: '6px', border: `2px solid ${recurringWeeks === w ? '#cc0000' : '#444'}`,
+                          background: recurringWeeks === w ? '#cc0000' : '#1a1a1a', color: '#fff', cursor: 'pointer', fontWeight: recurringWeeks === w ? 'bold' : 'normal',
+                          fontSize: '0.95rem'
+                        }}
+                      >
+                        {w}w
+                      </button>
+                    ))}
+                  </div>
+                  {selectedSlots.length > 0 && (
+                    <div style={{ marginTop: '0.75rem', padding: '0.6rem 0.75rem', background: '#1a0a00', border: '1px solid #7a3300', borderRadius: '6px' }}>
+                      <span style={{ color: '#e87722', fontSize: '0.85rem' }}>
+                        {recurringWeeks} weekly lessons every {new Date(selectedSlots[0].slot_date + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'long' })} at {formatHour(selectedSlots[0].start_hour)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {selectedDate && (
                 <div style={cardStyle}>
                   <label style={{ ...labelStyle, marginBottom: '0.75rem' }}>
                     Available Times — {formatDateShort(selectedDate)}
-                    <span style={{ color: '#555', fontWeight: 'normal', marginLeft: '0.5rem', textTransform: 'none', letterSpacing: 0 }}>tap to select multiple</span>
+                    {!recurringEnabled && <span style={{ color: '#555', fontWeight: 'normal', marginLeft: '0.5rem', textTransform: 'none', letterSpacing: 0 }}>tap to select multiple</span>}
+                    {recurringEnabled && <span style={{ color: '#e87722', fontWeight: 'normal', marginLeft: '0.5rem', textTransform: 'none', letterSpacing: 0 }}>select starting slot</span>}
                   </label>
                   {slotsForDate.length === 0 ? (
                     <p style={{ color: '#666', margin: 0 }}>No slots available on this date.</p>
@@ -570,7 +668,9 @@ export default function AdminBook() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={cardStyle}>
                 <h3 style={{ color: '#fff', margin: '0 0 1.25rem', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                  Booking Summary — {selectedSlots.length} Lesson{selectedSlots.length > 1 ? 's' : ''}
+                  {recurringEnabled
+                    ? `Recurring Booking — ${recurringWeeks} Weeks`
+                    : `Booking Summary — ${selectedSlots.length} Lesson${selectedSlots.length > 1 ? 's' : ''}`}
                 </h3>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -587,12 +687,24 @@ export default function AdminBook() {
                 </div>
 
                 <div style={{ borderTop: '1px solid #333', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  {[...selectedSlots].sort((a,b) => a.slot_date.localeCompare(b.slot_date) || a.start_hour - b.start_hour).map(slot => (
-                    <div key={slot.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid #222' }}>
-                      <span style={{ color: '#ccc', fontSize: '0.9rem' }}>{formatDate(slot.slot_date)}</span>
-                      <span style={{ color: '#cc0000', fontWeight: 'bold' }}>{formatHour(slot.start_hour)}</span>
+                  {recurringEnabled && selectedSlots[0] ? (
+                    <div style={{ background: '#1a0f00', border: '1px solid #7a4400', borderRadius: '6px', padding: '0.75rem 1rem' }}>
+                      <div style={{ color: '#e87722', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.4rem' }}>Recurring Schedule</div>
+                      <div style={{ color: '#fff', fontWeight: 'bold' }}>
+                        Every {new Date(selectedSlots[0].slot_date + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'long' })} at {formatHour(selectedSlots[0].start_hour)}
+                      </div>
+                      <div style={{ color: '#aaa', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                        Starting {formatDate(selectedSlots[0].slot_date)} · {recurringWeeks} lessons
+                      </div>
                     </div>
-                  ))}
+                  ) : (
+                    [...selectedSlots].sort((a,b) => a.slot_date.localeCompare(b.slot_date) || a.start_hour - b.start_hour).map(slot => (
+                      <div key={slot.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid #222' }}>
+                        <span style={{ color: '#ccc', fontSize: '0.9rem' }}>{formatDate(slot.slot_date)}</span>
+                        <span style={{ color: '#cc0000', fontWeight: 'bold' }}>{formatHour(slot.start_hour)}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem' }}>
@@ -626,7 +738,11 @@ export default function AdminBook() {
                     fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase'
                   }}
                 >
-                  {isProcessing ? `Booking ${selectedSlots.length}...` : `Confirm ${selectedSlots.length} Booking${selectedSlots.length > 1 ? 's' : ''}`}
+                  {isProcessing
+                    ? (recurringEnabled ? `Booking ${recurringWeeks} weeks...` : `Booking ${selectedSlots.length}...`)
+                    : recurringEnabled
+                      ? `Confirm ${recurringWeeks}-Week Series`
+                      : `Confirm ${selectedSlots.length} Booking${selectedSlots.length > 1 ? 's' : ''}`}
                 </button>
               </div>
             </div>
