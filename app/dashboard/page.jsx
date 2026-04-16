@@ -225,8 +225,8 @@ export default function Dashboard() {
   const tabStyle = (tab) => ({
     padding: '0.5rem 1.25rem',
     background: activeTab === tab ? '#cc0000' : 'transparent',
-    color: activeTab === tab ? '#fff' : '#666',
-    border: activeTab === tab ? '1px solid #cc0000' : '1px solid #333',
+    color: activeTab === tab ? '#fff' : '#aaa',
+    border: activeTab === tab ? '1px solid #cc0000' : '1px solid #555',
     borderRadius: '6px',
     cursor: 'pointer',
     fontSize: '0.85rem',
@@ -300,7 +300,7 @@ export default function Dashboard() {
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         <button style={tabStyle('upcoming')} onClick={() => setActiveTab('upcoming')}>
           Upcoming {upcomingBookings.length > 0 && <span style={{ background: '#cc0000', color: '#fff', borderRadius: '10px', padding: '1px 6px', fontSize: '0.75rem', marginLeft: '4px' }}>{upcomingBookings.length}</span>}
         </button>
