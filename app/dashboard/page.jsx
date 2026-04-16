@@ -19,6 +19,10 @@ export default function Dashboard() {
   const [balance, setBalance] = useState(0)
   const [cancelPrompt, setCancelPrompt] = useState(null)
   const [activeTab, setActiveTab] = useState('upcoming')
+  const [notifSaving, setNotifSaving] = useState(false)
+  const [notifSaved, setNotifSaved] = useState(false)
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -30,7 +34,7 @@ export default function Dashboard() {
 
       const { data: profileData } = await supabase
         .from('users')
-        .select('first_name, last_name, phone, belt_rank')
+        .select('first_name, last_name, phone, belt_rank, notify_2h, notify_12h, notify_24h, notify_48h')
         .eq('id', user.id)
         .single()
       setProfile(profileData)
@@ -52,6 +56,13 @@ export default function Dashboard() {
         .eq('student_id', user.id)
       const total = (tokenData || []).reduce((sum, t) => sum + t.amount, 0)
       setBalance(total)
+
+      // Check if push is already subscribed on this device
+      if ('serviceWorker' in navigator && 'PushManager' in window) {
+        const reg = await navigator.serviceWorker.ready
+        const existing = await reg.pushManager.getSubscription()
+        setPushEnabled(!!existing)
+      }
     }
     load()
   }, [])
@@ -167,6 +178,50 @@ export default function Dashboard() {
     ? `${profile.first_name} ${profile.last_name || ''}`.trim()
     : user?.email
 
+  async function togglePush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    setPushLoading(true)
+    try {
+      const reg = await navigator.serviceWorker.ready
+      if (pushEnabled) {
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) await sub.unsubscribe()
+        await fetch('/api/push/subscribe', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, endpoint: sub?.endpoint }),
+        })
+        setPushEnabled(false)
+      } else {
+        const permission = await Notification.requestPermission()
+        if (permission !== 'granted') { setPushLoading(false); return }
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+        })
+        await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, subscription: sub.toJSON() }),
+        })
+        setPushEnabled(true)
+      }
+    } catch (e) {
+      console.error('Push toggle failed', e)
+    }
+    setPushLoading(false)
+  }
+
+  async function saveNotifPref(key, value) {
+    setNotifSaving(true)
+    setNotifSaved(false)
+    setProfile(prev => ({ ...prev, [key]: value }))
+    await supabase.from('users').update({ [key]: value }).eq('id', user.id)
+    setNotifSaving(false)
+    setNotifSaved(true)
+    setTimeout(() => setNotifSaved(false), 2000)
+  }
+
   const tabStyle = (tab) => ({
     padding: '0.5rem 1.25rem',
     background: activeTab === tab ? '#cc0000' : 'transparent',
@@ -251,6 +306,9 @@ export default function Dashboard() {
         </button>
         <button style={tabStyle('history')} onClick={() => setActiveTab('history')}>
           History {pastBookings.length > 0 && <span style={{ background: '#444', color: '#ccc', borderRadius: '10px', padding: '1px 6px', fontSize: '0.75rem', marginLeft: '4px' }}>{pastBookings.length}</span>}
+        </button>
+        <button style={tabStyle('notifications')} onClick={() => setActiveTab('notifications')}>
+          Notifications
         </button>
       </div>
 
@@ -369,6 +427,110 @@ export default function Dashboard() {
             })
           )}
         </>
+      )}
+      {/* ── NOTIFICATIONS TAB ── */}
+      {activeTab === 'notifications' && (
+        <div style={{ maxWidth: '480px' }}>
+          <p style={{ color: '#999', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Choose how and when to receive reminders before your upcoming lessons.
+          </p>
+
+          {/* Push notifications */}
+          {'Notification' in window && (
+            <div style={{
+              background: '#1a1a1a',
+              border: `1px solid ${pushEnabled ? '#cc0000' : '#2a2a2a'}`,
+              borderRadius: '8px',
+              padding: '1rem 1.25rem',
+              marginBottom: '1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <div>
+                <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>Push notifications</div>
+                <div style={{ color: '#555', fontSize: '0.8rem', marginTop: '2px' }}>
+                  {pushEnabled ? 'Enabled on this device' : 'Get alerts on this device even when the app is closed'}
+                </div>
+              </div>
+              <button
+                onClick={togglePush}
+                disabled={pushLoading}
+                style={{
+                  width: '48px', height: '26px', borderRadius: '13px', border: 'none',
+                  cursor: pushLoading ? 'default' : 'pointer',
+                  background: pushEnabled ? '#cc0000' : '#333',
+                  position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: '3px',
+                  left: pushEnabled ? '25px' : '3px',
+                  width: '20px', height: '20px', borderRadius: '50%',
+                  background: '#fff', transition: 'left 0.2s',
+                }} />
+              </button>
+            </div>
+          )}
+
+          <div style={{ color: '#555', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.75rem' }}>Email reminders</div>
+
+          {[
+            { key: 'notify_48h', label: '48 hours before' },
+            { key: 'notify_24h', label: '24 hours before' },
+            { key: 'notify_12h', label: '12 hours before' },
+            { key: 'notify_2h',  label: '2 hours before' },
+          ].map(({ key, label }) => {
+            const enabled = profile?.[key] !== false // default true if null/undefined
+            return (
+              <div key={key} style={{
+                background: '#1a1a1a',
+                border: '1px solid #2a2a2a',
+                borderRadius: '8px',
+                padding: '1rem 1.25rem',
+                marginBottom: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <div>
+                  <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>{label}</div>
+                  <div style={{ color: '#555', fontSize: '0.8rem', marginTop: '2px' }}>Email reminder</div>
+                </div>
+                <button
+                  onClick={() => saveNotifPref(key, !enabled)}
+                  disabled={notifSaving}
+                  style={{
+                    width: '48px',
+                    height: '26px',
+                    borderRadius: '13px',
+                    border: 'none',
+                    cursor: notifSaving ? 'default' : 'pointer',
+                    background: enabled ? '#cc0000' : '#333',
+                    position: 'relative',
+                    transition: 'background 0.2s',
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute',
+                    top: '3px',
+                    left: enabled ? '25px' : '3px',
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    background: '#fff',
+                    transition: 'left 0.2s',
+                  }} />
+                </button>
+              </div>
+            )
+          })}
+
+          {notifSaved && (
+            <p style={{ color: '#4caf50', fontSize: '0.85rem', marginTop: '0.5rem' }}>Saved</p>
+          )}
+        </div>
       )}
     </main>
   )

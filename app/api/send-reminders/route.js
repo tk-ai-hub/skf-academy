@@ -1,7 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
+import webpush from 'web-push'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
+
+webpush.setVapidDetails(
+  `mailto:${process.env.VAPID_EMAIL}`,
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
+)
 
 const INTERVALS = [
   { label: '48h', hours: 48, text: '48 hours' },
@@ -49,9 +56,17 @@ export async function GET(request) {
     .select(`
       id, student_id,
       slots!bookings_slot_id_fkey (slot_date, start_hour),
-      users!bookings_student_id_fkey (email, first_name)
+      users!bookings_student_id_fkey (email, first_name, notify_2h, notify_12h, notify_24h, notify_48h)
     `)
     .eq('status', 'confirmed')
+
+  // Fetch all push subscriptions keyed by user_id
+  const { data: pushSubs } = await supabase.from('push_subscriptions').select('user_id, subscription')
+  const pushByUser = {}
+  for (const row of pushSubs || []) {
+    if (!pushByUser[row.user_id]) pushByUser[row.user_id] = []
+    pushByUser[row.user_id].push(row.subscription)
+  }
 
   if (!bookings?.length) return Response.json({ sent: 0, results: [] })
 
@@ -66,6 +81,10 @@ export async function GET(request) {
       const user = booking.users
       if (!slot || !user) continue
       if (!user.email || user.email.includes('@skf-academy.internal')) continue
+
+      // Respect per-user notification preferences (default: on if null/undefined)
+      const prefKey = `notify_${interval.label}` // notify_48h, notify_24h, notify_12h, notify_2h
+      if (user[prefKey] === false) continue
 
       // Check if this slot falls within the reminder window
       const slotUTC = slotToUTC(slot.slot_date, slot.start_hour)
@@ -113,6 +132,22 @@ export async function GET(request) {
           `,
         })
         results.push({ bookingId: booking.id, email: user.email, interval: interval.label, status: 'sent' })
+
+        // Send push notification to all user's devices
+        const subs = pushByUser[booking.student_id] || []
+        const payload = JSON.stringify({
+          title: `⏰ Lesson in ${interval.text}`,
+          body: `${dateStr} at ${timeStr} — Private Lesson`,
+          url: '/dashboard',
+        })
+        for (const sub of subs) {
+          webpush.sendNotification(sub, payload).catch(async (err) => {
+            // 410 Gone = subscription expired, remove it
+            if (err.statusCode === 410) {
+              await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+            }
+          })
+        }
       } catch (err) {
         // Roll back dedup record so it retries next run
         await supabase.from('sent_reminders')

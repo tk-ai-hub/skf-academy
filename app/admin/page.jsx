@@ -529,7 +529,7 @@ export default function Admin() {
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button
             onClick={() => { setAddStudentModal(true); setAddStudentForm({}); setAddStudentError('') }}
-            style={{ padding: '0.5rem 1.1rem', background: '#2a2a2a', color: '#fff', border: '1px solid #555', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '0.5px' }}
+            style={{ padding: '0.5rem 1.1rem', background: 'transparent', color: '#fff', border: '2px solid #fff', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '0.5px' }}
           >+ Add Student</button>
           <a href="/admin/book" style={{
             padding: '0.5rem 1.1rem',
@@ -743,7 +743,13 @@ export default function Admin() {
             </>
           )}
 
-          <h2 style={{ color: '#fff' }}>Students ({students.length})</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h2 style={{ color: '#fff', margin: 0 }}>Students ({students.length})</h2>
+            <button
+              onClick={() => { setAddStudentModal(true); setAddStudentForm({}); setAddStudentError('') }}
+              style={{ padding: '0.5rem 1.25rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}
+            >+ Add Student</button>
+          </div>
           {students.length === 0 ? (
             <p style={{ color: '#666' }}>No students yet.</p>
           ) : (

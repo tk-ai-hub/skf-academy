@@ -1,4 +1,5 @@
 import './globals.css'
+import ServiceWorkerRegistrar from './components/ServiceWorkerRegistrar'
 
 export const metadata = {
   title: 'SKF Academy',
@@ -41,6 +42,7 @@ export default function RootLayout({ children }) {
           </div>
         </header>
 
+        <ServiceWorkerRegistrar />
         <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.75rem 1.5rem 4rem' }}>
           {children}
         </div>
