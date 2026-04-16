@@ -521,30 +521,29 @@ export default function Admin() {
       )}
 
       {/* Tab Nav */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-        <button style={tabStyle('week')} onClick={() => setActiveTab('week')}>📅 Week View</button>
-        <button style={tabStyle('bookings')} onClick={() => setActiveTab('bookings')}>📋 All Bookings</button>
-        <button style={tabStyle('students')} onClick={() => setActiveTab('students')}>👥 Students</button>
-        <button style={tabStyle('block')} onClick={() => setActiveTab('block')}>🔒 Block Dates</button>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+      <div style={{ marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+          <button style={tabStyle('week')} onClick={() => setActiveTab('week')}>📅 Week View</button>
+          <button style={tabStyle('bookings')} onClick={() => setActiveTab('bookings')}>📋 All Bookings</button>
+          <button style={tabStyle('students')} onClick={() => setActiveTab('students')}>👥 Students</button>
+          <button style={tabStyle('block')} onClick={() => setActiveTab('block')}>🔒 Block Dates</button>
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button
             onClick={() => { setAddStudentModal(true); setAddStudentForm({}); setAddStudentError('') }}
-            style={{ padding: '0.5rem 1.1rem', background: 'transparent', color: '#fff', border: '2px solid #fff', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '0.5px' }}
+            style={{ padding: '0.6rem 1.25rem', background: '#1a1a1a', color: '#fff', border: '2px solid #cc0000', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }}
           >+ Add Student</button>
           <a href="/admin/book" style={{
-            padding: '0.5rem 1.1rem',
+            padding: '0.6rem 1.25rem',
             background: '#cc0000',
             color: '#fff',
-            border: '1px solid #cc0000',
+            border: '2px solid #cc0000',
             borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '0.85rem',
+            fontSize: '0.9rem',
             fontWeight: 'bold',
-            letterSpacing: '0.5px',
             textDecoration: 'none',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '0.4rem'
           }}>+ Book Lesson</a>
         </div>
       </div>
