@@ -87,6 +87,11 @@ export default function Admin() {
   const [blockWeekOffset, setBlockWeekOffset] = useState(0)
   const [blockCalSlots, setBlockCalSlots] = useState([])
 
+  // Inline token state
+  const [tokenBalances, setTokenBalances] = useState({})
+  const [inlineToken, setInlineToken] = useState(null) // { studentId, amount: '' }
+  const [inlineTokenSaving, setInlineTokenSaving] = useState(false)
+
   // Student profile modal
   const [profileModal, setProfileModal] = useState(null)
   const [profileTokens, setProfileTokens] = useState(0)
@@ -96,7 +101,7 @@ export default function Admin() {
   const [profileTokenAdjust, setProfileTokenAdjust] = useState('')
   const [profileTokenNote, setProfileTokenNote] = useState('')
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData(); loadTokenBalances() }, [])
   useEffect(() => { loadBlockCalSlots() }, [blockWeekOffset])
 
   async function loadData() {
@@ -133,6 +138,14 @@ export default function Admin() {
       return !rangeData?.some(r => slot.slot_date >= r.start_date && slot.slot_date <= r.end_date)
     }) || []
     setBlockedSlots(rangeSlots)
+  }
+
+  async function loadTokenBalances() {
+    const { data } = await supabase.from('tokens').select('student_id, amount')
+    if (!data) return
+    const balances = {}
+    data.forEach(t => { balances[t.student_id] = (balances[t.student_id] || 0) + t.amount })
+    setTokenBalances(balances)
   }
 
   async function loadBlockCalSlots() {
@@ -172,6 +185,23 @@ export default function Admin() {
       reason: 'added by admin'
     })
     setMessage(`${amount} token(s) added successfully.`)
+  }
+
+  async function submitInlineToken() {
+    if (!inlineToken || inlineTokenSaving) return
+    const amt = parseInt(inlineToken.amount)
+    if (isNaN(amt) || amt === 0) return
+    setInlineTokenSaving(true)
+    const { data: tenant } = await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()
+    await supabase.from('tokens').insert({
+      tenant_id: tenant.id,
+      student_id: inlineToken.studentId,
+      amount: amt,
+      reason: amt > 0 ? 'added by admin' : 'removed by admin'
+    })
+    setTokenBalances(prev => ({ ...prev, [inlineToken.studentId]: (prev[inlineToken.studentId] || 0) + amt }))
+    setInlineTokenSaving(false)
+    setInlineToken(null)
   }
 
   async function blockDates() {
@@ -653,25 +683,80 @@ export default function Admin() {
           {students.length === 0 ? (
             <p style={{ color: '#666' }}>No students yet.</p>
           ) : (
-            students.map(s => (
-              <div
-                key={s.id}
-                onClick={() => openProfileModal(s)}
-                style={{ border: '1px solid #333', borderRadius: '8px', padding: '1rem', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#2a2a2a', cursor: 'pointer', transition: 'border-color 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = '#cc0000'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = '#333'}
-              >
-                <div>
-                  <p style={{ margin: 0, fontWeight: 'bold', color: '#fff' }}>{studentName(s)}</p>
-                  <p style={{ margin: '0.2rem 0 0', color: '#666', fontSize: '0.85rem' }}>
-                    {s.belt_rank ? `${s.belt_rank} belt` : 'No belt set'}
-                    {s.phone && <span style={{ marginLeft: '0.75rem', color: '#555' }}>{s.phone}</span>}
-                    {s.date_of_birth && <span style={{ marginLeft: '0.75rem' }}>🎂 {s.date_of_birth}</span>}
-                  </p>
+            students.map(s => {
+              const balance = tokenBalances[s.id] || 0
+              const isEditing = inlineToken?.studentId === s.id
+              return (
+                <div
+                  key={s.id}
+                  style={{ border: '1px solid #333', borderRadius: '8px', padding: '0.85rem 1rem', marginBottom: '0.6rem', background: '#2a2a2a', transition: 'border-color 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = '#444'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = '#333'}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+                    {/* Name + info */}
+                    <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => openProfileModal(s)}>
+                      <p style={{ margin: 0, fontWeight: 'bold', color: '#fff' }}>{studentName(s)}</p>
+                      <p style={{ margin: '0.2rem 0 0', color: '#666', fontSize: '0.82rem' }}>
+                        {s.belt_rank ? `${s.belt_rank} belt` : 'No belt set'}
+                        {s.phone && <span style={{ marginLeft: '0.6rem', color: '#555' }}>{s.phone}</span>}
+                      </p>
+                    </div>
+
+                    {/* Token section */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                      {/* Balance badge */}
+                      <div style={{
+                        background: balance > 0 ? '#1a2a1a' : balance < 0 ? '#2a0a0a' : '#1a1a1a',
+                        border: `1px solid ${balance > 0 ? '#2a5a2a' : balance < 0 ? '#5a2a2a' : '#333'}`,
+                        borderRadius: '20px', padding: '0.25rem 0.7rem',
+                        color: balance > 0 ? '#66cc66' : balance < 0 ? '#cc6666' : '#555',
+                        fontSize: '0.82rem', fontWeight: 'bold', whiteSpace: 'nowrap'
+                      }}>
+                        🪙 {balance}
+                      </div>
+
+                      {/* Quick ± buttons */}
+                      {!isEditing ? (
+                        <>
+                          <button
+                            onClick={() => setInlineToken({ studentId: s.id, amount: '' })}
+                            style={{ padding: '0.25rem 0.55rem', background: '#1a2a1a', border: '1px solid #2a5a2a', borderRadius: '6px', color: '#66cc66', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+                            title="Add / remove tokens"
+                          >±</button>
+                          <button
+                            onClick={() => openProfileModal(s)}
+                            style={{ padding: '0.25rem 0.55rem', background: 'transparent', border: '1px solid #333', borderRadius: '6px', color: '#666', cursor: 'pointer', fontSize: '0.78rem' }}
+                          >View</button>
+                        </>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <button onClick={() => setInlineToken(t => ({ ...t, amount: String((parseInt(t.amount) || 0) - 1) }))}
+                            style={{ width: '28px', height: '28px', background: '#2a0a0a', border: '1px solid #552222', borderRadius: '4px', color: '#cc6666', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}>−</button>
+                          <input
+                            type="number"
+                            value={inlineToken.amount}
+                            onChange={e => setInlineToken(t => ({ ...t, amount: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') submitInlineToken(); if (e.key === 'Escape') setInlineToken(null) }}
+                            autoFocus
+                            style={{ width: '52px', padding: '0.25rem 0.35rem', background: '#111', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', textAlign: 'center' }}
+                            placeholder="0"
+                          />
+                          <button onClick={() => setInlineToken(t => ({ ...t, amount: String((parseInt(t.amount) || 0) + 1) }))}
+                            style={{ width: '28px', height: '28px', background: '#0a2a0a', border: '1px solid #225522', borderRadius: '4px', color: '#66cc66', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}>+</button>
+                          <button onClick={submitInlineToken} disabled={inlineTokenSaving}
+                            style={{ padding: '0.25rem 0.55rem', background: '#cc0000', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                            {inlineTokenSaving ? '…' : '✓'}
+                          </button>
+                          <button onClick={() => setInlineToken(null)}
+                            style={{ padding: '0.25rem 0.4rem', background: 'transparent', border: '1px solid #333', borderRadius: '4px', color: '#666', cursor: 'pointer', fontSize: '0.85rem' }}>✕</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <span style={{ color: '#444', fontSize: '0.8rem' }}>View →</span>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       )}
