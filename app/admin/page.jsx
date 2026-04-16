@@ -87,6 +87,12 @@ export default function Admin() {
   const [blockWeekOffset, setBlockWeekOffset] = useState(0)
   const [blockCalSlots, setBlockCalSlots] = useState([])
 
+  // Add student modal
+  const [addStudentModal, setAddStudentModal] = useState(false)
+  const [addStudentForm, setAddStudentForm] = useState({})
+  const [addStudentSaving, setAddStudentSaving] = useState(false)
+  const [addStudentError, setAddStudentError] = useState('')
+
   // Inline token state
   const [tokenBalances, setTokenBalances] = useState({})
   const [inlineToken, setInlineToken] = useState(null) // { studentId, amount: '' }
@@ -189,6 +195,25 @@ export default function Admin() {
       reason: 'added by admin'
     })
     setMessage(`${amount} token(s) added successfully.`)
+  }
+
+  async function submitAddStudent() {
+    if (addStudentSaving) return
+    setAddStudentError('')
+    setAddStudentSaving(true)
+    const res = await fetch('/api/admin/create-student', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(addStudentForm),
+    })
+    const d = await res.json()
+    setAddStudentSaving(false)
+    if (!res.ok) { setAddStudentError(d.error || 'Failed to create student'); return }
+    setAddStudentModal(false)
+    setAddStudentForm({})
+    loadData()
+    loadTokenBalances()
+    setMessage(`Student "${d.fullName}" added successfully.`)
   }
 
   async function submitInlineToken() {
@@ -713,7 +738,13 @@ export default function Admin() {
             </>
           )}
 
-          <h2 style={{ color: '#fff' }}>Students</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2 style={{ color: '#fff', margin: 0 }}>Students ({students.length})</h2>
+            <button
+              onClick={() => { setAddStudentModal(true); setAddStudentForm({}); setAddStudentError('') }}
+              style={{ padding: '0.5rem 1rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+            >+ Add Student</button>
+          </div>
           {students.length === 0 ? (
             <p style={{ color: '#666' }}>No students yet.</p>
           ) : (
@@ -1097,6 +1128,74 @@ export default function Admin() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADD STUDENT MODAL ── */}
+      {addStudentModal && (
+        <div onClick={e => { if (e.target === e.currentTarget) { setAddStudentModal(false); setAddStudentForm({}) } }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', width: '100%', maxWidth: '480px', padding: '1.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div>
+                <div style={{ color: '#999', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>New Student</div>
+                <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.1rem', marginTop: '0.2rem' }}>Add Student Account</div>
+              </div>
+              <button onClick={() => { setAddStudentModal(false); setAddStudentForm({}) }} style={{ background: 'none', border: 'none', color: '#555', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              {[
+                { label: 'First Name *', key: 'firstName', span: false },
+                { label: 'Last Name', key: 'lastName', span: false },
+                { label: 'Email *', key: 'email', type: 'email', span: true },
+                { label: 'Phone', key: 'phone', type: 'tel', span: false },
+                { label: 'Date of Birth', key: 'dob', type: 'date', span: false },
+              ].map(({ label, key, type, span }) => (
+                <div key={key} style={{ gridColumn: span ? '1 / -1' : undefined }}>
+                  <label style={{ display: 'block', color: '#666', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.25rem' }}>{label}</label>
+                  <input
+                    type={type || 'text'}
+                    value={addStudentForm[key] || ''}
+                    onChange={e => setAddStudentForm(p => ({ ...p, [key]: e.target.value }))}
+                    style={{ width: '100%', padding: '0.55rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+              ))}
+              <div>
+                <label style={{ display: 'block', color: '#666', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.25rem' }}>Belt Rank</label>
+                <select value={addStudentForm.beltRank || ''} onChange={e => setAddStudentForm(p => ({ ...p, beltRank: e.target.value }))}
+                  style={{ width: '100%', padding: '0.55rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.9rem' }}>
+                  <option value="">— Not set —</option>
+                  {['White','Yellow','Orange','Green','Blue','Purple','Brown','Red','Black'].map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#666', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.25rem' }}>Starting Tokens</label>
+                <input
+                  type="number" min="0" placeholder="0"
+                  value={addStudentForm.initialTokens || ''}
+                  onChange={e => setAddStudentForm(p => ({ ...p, initialTokens: e.target.value }))}
+                  style={{ width: '100%', padding: '0.55rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+
+            {addStudentError && (
+              <p style={{ color: '#ff6666', fontSize: '0.85rem', margin: '0 0 0.75rem', padding: '0.5rem 0.75rem', background: '#2a0a0a', border: '1px solid #6a2a2a', borderRadius: '6px' }}>{addStudentError}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+              <button onClick={() => { setAddStudentModal(false); setAddStudentForm({}) }}
+                style={{ flex: 1, padding: '0.7rem', background: 'transparent', border: '1px solid #333', borderRadius: '6px', color: '#888', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={submitAddStudent} disabled={addStudentSaving || !addStudentForm.firstName?.trim() || !addStudentForm.email?.trim()}
+                style={{ flex: 2, padding: '0.7rem', background: (addStudentSaving || !addStudentForm.firstName?.trim() || !addStudentForm.email?.trim()) ? '#333' : '#cc0000', color: (addStudentSaving || !addStudentForm.firstName?.trim() || !addStudentForm.email?.trim()) ? '#666' : '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                {addStudentSaving ? 'Creating…' : 'Create Student'}
+              </button>
             </div>
           </div>
         </div>
