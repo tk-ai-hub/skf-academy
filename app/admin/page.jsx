@@ -101,6 +101,7 @@ export default function Admin() {
   const [profileTokenAdjust, setProfileTokenAdjust] = useState('')
   const [profileTokenNote, setProfileTokenNote] = useState('')
   const [profilePastBookings, setProfilePastBookings] = useState([])
+  const [profileBookingTab, setProfileBookingTab] = useState('upcoming')
   const [profileDeleteConfirm, setProfileDeleteConfirm] = useState(false)
   const [profileDeleting, setProfileDeleting] = useState(false)
 
@@ -335,6 +336,7 @@ export default function Admin() {
     setProfileSaving(false)
     setProfileBookings([])
     setProfilePastBookings([])
+    setProfileBookingTab('upcoming')
     const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', s.id)
     setProfileTokens((tokenData || []).reduce((sum, t) => sum + t.amount, 0))
     const today = new Date().toISOString().split('T')[0]
@@ -1006,50 +1008,64 @@ export default function Admin() {
               >+ Book Lesson</a>
             </div>
 
-            {/* Upcoming bookings */}
+            {/* Bookings tabs */}
             <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.6rem' }}>Upcoming Lessons</div>
-              {profileBookings.length === 0 ? (
-                <p style={{ color: '#444', fontSize: '0.85rem', margin: 0 }}>No upcoming lessons.</p>
-              ) : (
-                profileBookings.map(b => (
-                  <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: '#111', border: '1px solid #2a2a2a', borderRadius: '6px', marginBottom: '0.4rem' }}>
-                    <span style={{ color: '#ccc', fontSize: '0.875rem' }}>{b.slots.slot_date} · {formatHour(b.slots.start_hour)}</span>
-                    <button
-                      onClick={async () => {
-                        await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin' }).eq('id', b.id)
-                        await supabase.from('tokens').insert({ tenant_id: bookings.find(x => x.id === b.id)?.tenant_id, student_id: profileModal.id, amount: 1, reason: 'cancelled by admin - refund', booking_id: b.id })
-                        setProfileBookings(prev => prev.filter(x => x.id !== b.id))
-                        loadData()
-                      }}
-                      style={{ padding: '0.2rem 0.6rem', background: 'transparent', color: '#884444', border: '1px solid #442222', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
-                    >Cancel</button>
+              <div style={{ display: 'flex', borderBottom: '1px solid #2a2a2a', marginBottom: '0.75rem' }}>
+                {[
+                  { key: 'upcoming', label: 'Upcoming', count: profileBookings.length },
+                  { key: 'history', label: 'History', count: profilePastBookings.length },
+                ].map(t => (
+                  <button key={t.key} onClick={() => setProfileBookingTab(t.key)} style={{
+                    padding: '0.5rem 1rem', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: profileBookingTab === t.key ? 'bold' : 'normal',
+                    color: profileBookingTab === t.key ? '#fff' : '#555',
+                    borderBottom: profileBookingTab === t.key ? '2px solid #cc0000' : '2px solid transparent',
+                    marginBottom: '-1px'
+                  }}>
+                    {t.label}
+                    {t.count > 0 && <span style={{ marginLeft: '0.4rem', background: profileBookingTab === t.key ? '#cc0000' : '#333', color: '#fff', borderRadius: '10px', padding: '0 0.4rem', fontSize: '0.7rem' }}>{t.count}</span>}
+                  </button>
+                ))}
+              </div>
+
+              {profileBookingTab === 'upcoming' && (
+                profileBookings.length === 0
+                  ? <p style={{ color: '#444', fontSize: '0.85rem', margin: 0 }}>No upcoming lessons.</p>
+                  : profileBookings.map(b => (
+                    <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: '#111', border: '1px solid #2a2a2a', borderRadius: '6px', marginBottom: '0.4rem' }}>
+                      <span style={{ color: '#ccc', fontSize: '0.875rem' }}>{b.slots.slot_date} · {formatHour(b.slots.start_hour)}</span>
+                      <button
+                        onClick={async () => {
+                          await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin' }).eq('id', b.id)
+                          await supabase.from('tokens').insert({ tenant_id: b.tenant_id, student_id: profileModal.id, amount: 1, reason: 'cancelled by admin - refund', booking_id: b.id })
+                          setProfileBookings(prev => prev.filter(x => x.id !== b.id))
+                          loadData()
+                        }}
+                        style={{ padding: '0.2rem 0.6rem', background: 'transparent', color: '#884444', border: '1px solid #442222', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                      >Cancel</button>
+                    </div>
+                  ))
+              )}
+
+              {profileBookingTab === 'history' && (
+                profilePastBookings.length === 0
+                  ? <p style={{ color: '#444', fontSize: '0.85rem', margin: 0 }}>No lesson history.</p>
+                  : <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    {profilePastBookings.map(b => {
+                      const cancelled = b.status === 'cancelled'
+                      return (
+                        <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0.75rem', background: cancelled ? '#111' : '#0a1a0a', border: `1px solid ${cancelled ? '#2a2a2a' : '#1a3a1a'}`, borderRadius: '6px' }}>
+                          <span style={{ color: cancelled ? '#444' : '#888', fontSize: '0.85rem', textDecoration: cancelled ? 'line-through' : 'none' }}>
+                            {b.slots.slot_date} · {formatHour(b.slots.start_hour)}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: cancelled ? '#554444' : '#2a6a2a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            {cancelled ? 'Cancelled' : 'Completed'}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
-                ))
               )}
             </div>
-
-            {/* Lesson history */}
-            {profilePastBookings.length > 0 && (
-              <div style={{ marginBottom: '1.5rem' }}>
-                <div style={{ color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.6rem' }}>Lesson History</div>
-                <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                  {profilePastBookings.map(b => {
-                    const cancelled = b.status === 'cancelled'
-                    return (
-                      <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0.75rem', background: cancelled ? '#111' : '#0a1a0a', border: `1px solid ${cancelled ? '#2a2a2a' : '#1a3a1a'}`, borderRadius: '6px' }}>
-                        <span style={{ color: cancelled ? '#444' : '#888', fontSize: '0.85rem', textDecoration: cancelled ? 'line-through' : 'none' }}>
-                          {b.slots.slot_date} · {formatHour(b.slots.start_hour)}
-                        </span>
-                        <span style={{ fontSize: '0.72rem', color: cancelled ? '#554444' : '#2a6a2a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          {cancelled ? 'Cancelled' : 'Completed'}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
 
             {/* Delete student */}
             <div style={{ borderTop: '1px solid #222', paddingTop: '1.25rem' }}>
