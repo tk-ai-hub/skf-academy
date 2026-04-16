@@ -100,6 +100,8 @@ export default function Admin() {
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileTokenAdjust, setProfileTokenAdjust] = useState('')
   const [profileTokenNote, setProfileTokenNote] = useState('')
+  const [profileDeleteConfirm, setProfileDeleteConfirm] = useState(false)
+  const [profileDeleting, setProfileDeleting] = useState(false)
 
   useEffect(() => { loadData(); loadTokenBalances() }, [])
   useEffect(() => { loadBlockCalSlots() }, [blockWeekOffset])
@@ -343,7 +345,32 @@ export default function Admin() {
     setProfileBookings((bData || []).filter(b => b.slots && b.slots.slot_date >= today))
   }
 
-  function closeProfileModal() { setProfileModal(null) }
+  function closeProfileModal() {
+    setProfileModal(null)
+    setProfileDeleteConfirm(false)
+    setProfileDeleting(false)
+  }
+
+  async function deleteStudent() {
+    if (!profileModal || profileDeleting) return
+    setProfileDeleting(true)
+    const res = await fetch('/api/admin/delete-student', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId: profileModal.id })
+    })
+    if (res.ok) {
+      setStudents(prev => prev.filter(s => s.id !== profileModal.id))
+      setTokenBalances(prev => { const n = { ...prev }; delete n[profileModal.id]; return n })
+      closeProfileModal()
+      loadData()
+    } else {
+      const d = await res.json()
+      setProfileDeleting(false)
+      setProfileDeleteConfirm(false)
+      setMessage('Delete failed: ' + (d.error || 'Unknown error'))
+    }
+  }
 
   async function saveProfileEdit() {
     if (!profileModal) return
@@ -975,7 +1002,7 @@ export default function Admin() {
             </div>
 
             {/* Upcoming bookings */}
-            <div>
+            <div style={{ marginBottom: '1.5rem' }}>
               <div style={{ color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.6rem' }}>Upcoming Lessons</div>
               {profileBookings.length === 0 ? (
                 <p style={{ color: '#444', fontSize: '0.85rem', margin: 0 }}>No upcoming lessons.</p>
@@ -994,6 +1021,38 @@ export default function Admin() {
                     >Cancel</button>
                   </div>
                 ))
+              )}
+            </div>
+
+            {/* Delete student */}
+            <div style={{ borderTop: '1px solid #222', paddingTop: '1.25rem' }}>
+              {!profileDeleteConfirm ? (
+                <button
+                  onClick={() => setProfileDeleteConfirm(true)}
+                  style={{ width: '100%', padding: '0.6rem', background: 'transparent', border: '1px solid #442222', borderRadius: '6px', color: '#884444', cursor: 'pointer', fontSize: '0.85rem' }}
+                >
+                  Delete Student Account
+                </button>
+              ) : (
+                <div style={{ background: '#1a0000', border: '1px solid #6a2222', borderRadius: '8px', padding: '1rem' }}>
+                  <p style={{ color: '#ff6666', margin: '0 0 0.75rem', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                    Delete {studentName(profileModal)}?
+                  </p>
+                  <p style={{ color: '#884444', margin: '0 0 1rem', fontSize: '0.82rem', lineHeight: 1.5 }}>
+                    This will cancel all upcoming bookings and permanently delete the account. This cannot be undone.
+                  </p>
+                  <div style={{ display: 'flex', gap: '0.6rem' }}>
+                    <button
+                      onClick={() => setProfileDeleteConfirm(false)}
+                      style={{ flex: 1, padding: '0.6rem', background: 'transparent', border: '1px solid #333', borderRadius: '6px', color: '#888', cursor: 'pointer', fontSize: '0.9rem' }}
+                    >Cancel</button>
+                    <button
+                      onClick={deleteStudent}
+                      disabled={profileDeleting}
+                      style={{ flex: 2, padding: '0.6rem', background: '#cc0000', border: 'none', borderRadius: '6px', color: '#fff', cursor: profileDeleting ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}
+                    >{profileDeleting ? 'Deleting…' : 'Yes, Delete Account'}</button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
