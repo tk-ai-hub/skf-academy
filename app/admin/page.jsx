@@ -74,7 +74,7 @@ export default function Admin() {
 
   // Quick-book modal state
   const [bookModal, setBookModal] = useState(null) // { date, hour }
-  const [bookModalSlot, setBookModalSlot] = useState(null)
+  const [bookModalSlot, setBookModalSlot] = useState(undefined)
   const [bookModalSearch, setBookModalSearch] = useState('')
   const [bookModalStudent, setBookModalStudent] = useState(null)
   const [bookModalIsGuest, setBookModalIsGuest] = useState(false)
@@ -83,6 +83,7 @@ export default function Admin() {
   const [bookModalGuestPhone, setBookModalGuestPhone] = useState('')
   const [bookModalProcessing, setBookModalProcessing] = useState(false)
   const [bookModalSuccess, setBookModalSuccess] = useState(false)
+  const [bookModalError, setBookModalError] = useState('')
   const [blockWeekOffset, setBlockWeekOffset] = useState(0)
   const [blockCalSlots, setBlockCalSlots] = useState([])
 
@@ -226,7 +227,7 @@ export default function Admin() {
   // --- Quick-book modal ---
   async function openBookModal(date, hour) {
     setBookModal({ date, hour })
-    setBookModalSlot(null)
+    setBookModalSlot(undefined) // undefined = loading, null = not found
     setBookModalSearch('')
     setBookModalStudent(null)
     setBookModalIsGuest(false)
@@ -235,13 +236,14 @@ export default function Admin() {
     setBookModalGuestPhone('')
     setBookModalProcessing(false)
     setBookModalSuccess(false)
-    const { data } = await supabase.from('slots').select('id').eq('slot_date', date).eq('start_hour', hour).single()
+    setBookModalError('')
+    const { data } = await supabase.from('slots').select('*').eq('slot_date', date).eq('start_hour', hour).maybeSingle()
     setBookModalSlot(data || null)
   }
 
   function closeBookModal() {
     setBookModal(null)
-    setBookModalSlot(null)
+    setBookModalSlot(undefined)
     setBookModalSearch('')
     setBookModalStudent(null)
     setBookModalIsGuest(false)
@@ -249,6 +251,7 @@ export default function Admin() {
     setBookModalGuestLast('')
     setBookModalGuestPhone('')
     setBookModalSuccess(false)
+    setBookModalError('')
   }
 
   async function confirmBookModal() {
@@ -256,23 +259,28 @@ export default function Admin() {
     if (!bookModalIsGuest && !bookModalStudent) return
     if (bookModalIsGuest && !bookModalGuestFirst.trim()) return
     setBookModalProcessing(true)
+    setBookModalError('')
     const payload = bookModalIsGuest
       ? { slotId: bookModalSlot.id, guestFirstName: bookModalGuestFirst.trim(), guestLastName: bookModalGuestLast.trim(), guestPhone: bookModalGuestPhone.trim() }
       : { slotId: bookModalSlot.id, studentId: bookModalStudent.id }
-    const res = await fetch('/api/admin-book', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    setBookModalProcessing(false)
-    if (res.ok) {
-      setBookModalSuccess(true)
-      loadData()
-      setTimeout(() => closeBookModal(), 1200)
-    } else {
+    try {
+      const res = await fetch('/api/admin-book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
       const d = await res.json()
-      setMessage(d.error || 'Booking failed.')
-      closeBookModal()
+      setBookModalProcessing(false)
+      if (res.ok) {
+        setBookModalSuccess(true)
+        loadData()
+        setTimeout(() => closeBookModal(), 2000)
+      } else {
+        setBookModalError(d.error || 'Booking failed. Please try again.')
+      }
+    } catch (err) {
+      setBookModalProcessing(false)
+      setBookModalError('Network error: ' + err.message)
     }
   }
 
@@ -986,11 +994,18 @@ export default function Admin() {
                   </div>
                 )}
 
-                {!bookModalSlot && bookModal && (
+                {bookModalSlot === undefined && (
                   <p style={{ color: '#666', fontSize: '0.8rem', margin: '0 0 0.75rem' }}>Loading slot…</p>
                 )}
-                {bookModalSlot === null && bookModal && bookModalSlot !== undefined && (
-                  <p style={{ color: '#884444', fontSize: '0.8rem', margin: '0 0 0.75rem' }}>No slot available for this time.</p>
+                {bookModalSlot === null && (
+                  <p style={{ color: '#cc4444', fontSize: '0.85rem', margin: '0 0 0.75rem', padding: '0.5rem 0.75rem', background: '#2a0a0a', border: '1px solid #6a2a2a', borderRadius: '6px' }}>
+                    No slot exists for this time. Use the <strong>+ Book Lesson</strong> page instead.
+                  </p>
+                )}
+                {bookModalError && (
+                  <p style={{ color: '#ff6666', fontSize: '0.85rem', margin: '0 0 0.75rem', padding: '0.5rem 0.75rem', background: '#2a0a0a', border: '1px solid #6a2a2a', borderRadius: '6px' }}>
+                    {bookModalError}
+                  </p>
                 )}
 
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>

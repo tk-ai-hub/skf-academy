@@ -130,13 +130,14 @@ export async function POST(request) {
     await supabaseAdmin.from('tokens').insert({ tenant_id: slot.tenant_id, student_id: userId, amount: -1, reason: 'lesson booked by admin', booking_id: booking.id })
   }
 
-  // Send confirmation email to student
+  const h = slot.start_hour
+  const timeStr = h < 12 ? h+':00 AM' : h === 12 ? '12:00 PM' : (h-12)+':00 PM'
+  const ds = new Date(slot.slot_date+'T00:00:00').toLocaleDateString('en-CA', { weekday:'long', month:'long', day:'numeric' })
+
+  // Send confirmation email to student (registered only)
   try {
     const { data: profile } = await supabaseAdmin.from('users').select('email,first_name').eq('id', userId).single()
     if (profile?.email && !profile.email.includes('@skf-academy.internal')) {
-      const h = slot.start_hour
-      const timeStr = h < 12 ? h+':00 AM' : h === 12 ? '12:00 PM' : (h-12)+':00 PM'
-      const ds = new Date(slot.slot_date+'T00:00:00').toLocaleDateString('en-CA', { weekday:'long', month:'long', day:'numeric' })
       await resend.emails.send({
         from: 'SKF Academy <noreply@kungfubc.com>',
         to: profile.email,
@@ -145,6 +146,18 @@ export async function POST(request) {
       })
     }
   } catch(emailErr) { console.error('Email error:', emailErr.message) }
+
+  // Send admin notification for guest/walk-in bookings
+  if (!studentId && process.env.ADMIN_NOTIFICATION_EMAIL) {
+    try {
+      await resend.emails.send({
+        from: 'SKF Academy <noreply@kungfubc.com>',
+        to: process.env.ADMIN_NOTIFICATION_EMAIL,
+        subject: `Walk-in booked: ${studentName}`,
+        html: '<div style="font-family:sans-serif;background:#111;color:#fff;padding:2rem;border-radius:8px;max-width:500px"><h2 style="color:#cc0000">Walk-in Booking</h2><p>A walk-in lesson was booked by admin.</p><table style="width:100%;border-collapse:collapse;margin-top:1rem"><tr><td style="color:#999;padding:0.4rem 0">Client</td><td style="color:#fff;font-weight:bold">'+studentName+'</td></tr><tr><td style="color:#999;padding:0.4rem 0">Phone</td><td style="color:#fff">'+(studentPhone||'—')+'</td></tr><tr><td style="color:#999;padding:0.4rem 0">Date</td><td style="color:#fff">'+ds+'</td></tr><tr><td style="color:#999;padding:0.4rem 0">Time</td><td style="color:#cc0000;font-weight:bold">'+timeStr+'</td></tr></table><a href="https://app.kungfubc.com/admin" style="display:inline-block;margin-top:1.5rem;padding:0.75rem 1.5rem;background:#cc0000;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold">View Admin</a></div>'
+      })
+    } catch(adminEmailErr) { console.error('Admin notification email error:', adminEmailErr.message) }
+  }
 
   return Response.json({ success: true, booking, studentName, studentId: userId })
 }
