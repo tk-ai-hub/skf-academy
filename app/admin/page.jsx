@@ -342,7 +342,7 @@ export default function Admin() {
   })
 
   return (
-    <main style={{ fontFamily: 'sans-serif', maxWidth: '900px', margin: '0 auto' }}>
+    <main style={{ fontFamily: 'sans-serif' }}>
       <h1 style={{ color: '#fff', borderBottom: '2px solid #cc0000', paddingBottom: '0.5rem' }}>SKF Academy — Admin</h1>
 
       {message && (
@@ -420,7 +420,7 @@ export default function Admin() {
 
           {/* Calendar Grid */}
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
                   <th style={{ width: '70px', color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #333' }}>Time</th>
@@ -647,7 +647,7 @@ export default function Admin() {
 
           {/* Block calendar grid */}
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
                   <th style={{ width: '70px', color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', padding: '0.4rem 0.5rem', textAlign: 'left', borderBottom: '1px solid #333' }}>Time</th>

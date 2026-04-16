@@ -41,7 +41,7 @@ export default function RootLayout({ children }) {
           </div>
         </header>
 
-        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '1.75rem 1.25rem 4rem' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.75rem 1.5rem 4rem' }}>
           {children}
         </div>
 
