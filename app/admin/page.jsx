@@ -100,6 +100,7 @@ export default function Admin() {
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileTokenAdjust, setProfileTokenAdjust] = useState('')
   const [profileTokenNote, setProfileTokenNote] = useState('')
+  const [profilePastBookings, setProfilePastBookings] = useState([])
   const [profileDeleteConfirm, setProfileDeleteConfirm] = useState(false)
   const [profileDeleting, setProfileDeleting] = useState(false)
 
@@ -332,21 +333,25 @@ export default function Admin() {
     setProfileTokenAdjust('')
     setProfileTokenNote('')
     setProfileSaving(false)
+    setProfileBookings([])
+    setProfilePastBookings([])
     const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', s.id)
     setProfileTokens((tokenData || []).reduce((sum, t) => sum + t.amount, 0))
     const today = new Date().toISOString().split('T')[0]
     const { data: bData } = await supabase
       .from('bookings')
-      .select('id, status, slots!bookings_slot_id_fkey(slot_date, start_hour)')
+      .select('id, status, tenant_id, slots!bookings_slot_id_fkey(slot_date, start_hour)')
       .eq('student_id', s.id)
-      .eq('status', 'confirmed')
-      .gte('slots.slot_date', today)
-      .order('booked_at', { ascending: true })
-    setProfileBookings((bData || []).filter(b => b.slots && b.slots.slot_date >= today))
+      .in('status', ['confirmed', 'cancelled'])
+      .order('booked_at', { ascending: false })
+    const all = (bData || []).filter(b => b.slots)
+    setProfileBookings(all.filter(b => b.status === 'confirmed' && b.slots.slot_date >= today))
+    setProfilePastBookings(all.filter(b => b.slots.slot_date < today || b.status === 'cancelled'))
   }
 
   function closeProfileModal() {
     setProfileModal(null)
+    setProfilePastBookings([])
     setProfileDeleteConfirm(false)
     setProfileDeleting(false)
   }
@@ -1023,6 +1028,28 @@ export default function Admin() {
                 ))
               )}
             </div>
+
+            {/* Lesson history */}
+            {profilePastBookings.length > 0 && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.6rem' }}>Lesson History</div>
+                <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {profilePastBookings.map(b => {
+                    const cancelled = b.status === 'cancelled'
+                    return (
+                      <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0.75rem', background: cancelled ? '#111' : '#0a1a0a', border: `1px solid ${cancelled ? '#2a2a2a' : '#1a3a1a'}`, borderRadius: '6px' }}>
+                        <span style={{ color: cancelled ? '#444' : '#888', fontSize: '0.85rem', textDecoration: cancelled ? 'line-through' : 'none' }}>
+                          {b.slots.slot_date} · {formatHour(b.slots.start_hour)}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: cancelled ? '#554444' : '#2a6a2a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          {cancelled ? 'Cancelled' : 'Completed'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Delete student */}
             <div style={{ borderTop: '1px solid #222', paddingTop: '1.25rem' }}>
