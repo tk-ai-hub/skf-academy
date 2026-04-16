@@ -86,6 +86,15 @@ export default function Admin() {
   const [blockWeekOffset, setBlockWeekOffset] = useState(0)
   const [blockCalSlots, setBlockCalSlots] = useState([])
 
+  // Student profile modal
+  const [profileModal, setProfileModal] = useState(null)
+  const [profileTokens, setProfileTokens] = useState(0)
+  const [profileBookings, setProfileBookings] = useState([])
+  const [profileEdit, setProfileEdit] = useState({})
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileTokenAdjust, setProfileTokenAdjust] = useState('')
+  const [profileTokenNote, setProfileTokenNote] = useState('')
+
   useEffect(() => { loadData() }, [])
   useEffect(() => { loadBlockCalSlots() }, [blockWeekOffset])
 
@@ -275,6 +284,59 @@ export default function Admin() {
         return name.includes(q) || phone.includes(q.replace(/\D/g, ''))
       })
     : students
+
+  // --- Student Profile Modal ---
+  async function openProfileModal(s) {
+    setProfileModal(s)
+    setProfileEdit({ firstName: s.first_name || '', lastName: s.last_name || '', phone: s.phone || '', dob: s.date_of_birth || '', beltRank: s.belt_rank || '' })
+    setProfileTokenAdjust('')
+    setProfileTokenNote('')
+    setProfileSaving(false)
+    const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', s.id)
+    setProfileTokens((tokenData || []).reduce((sum, t) => sum + t.amount, 0))
+    const today = new Date().toISOString().split('T')[0]
+    const { data: bData } = await supabase
+      .from('bookings')
+      .select('id, status, slots!bookings_slot_id_fkey(slot_date, start_hour)')
+      .eq('student_id', s.id)
+      .eq('status', 'confirmed')
+      .gte('slots.slot_date', today)
+      .order('booked_at', { ascending: true })
+    setProfileBookings((bData || []).filter(b => b.slots && b.slots.slot_date >= today))
+  }
+
+  function closeProfileModal() { setProfileModal(null) }
+
+  async function saveProfileEdit() {
+    if (!profileModal) return
+    setProfileSaving(true)
+    const res = await fetch('/api/admin/update-student', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId: profileModal.id, firstName: profileEdit.firstName, lastName: profileEdit.lastName, phone: profileEdit.phone, dob: profileEdit.dob, beltRank: profileEdit.beltRank })
+    })
+    setProfileSaving(false)
+    if (res.ok) {
+      setStudents(prev => prev.map(s => s.id === profileModal.id
+        ? { ...s, first_name: profileEdit.firstName, last_name: profileEdit.lastName, phone: profileEdit.phone, date_of_birth: profileEdit.dob || null, belt_rank: profileEdit.beltRank, full_name: [profileEdit.firstName, profileEdit.lastName].filter(Boolean).join(' ') }
+        : s
+      ))
+      setProfileModal(prev => ({ ...prev, first_name: profileEdit.firstName, last_name: profileEdit.lastName, phone: profileEdit.phone, date_of_birth: profileEdit.dob || null, belt_rank: profileEdit.beltRank }))
+      setMessage('Profile updated.')
+    }
+  }
+
+  async function applyTokenAdjust(sign) {
+    const amt = parseInt(profileTokenAdjust)
+    if (!amt || amt <= 0 || !profileModal) return
+    const final = sign * amt
+    const { data: tenant } = await supabase.from('tenants').select('id').eq('slug', 'skf-academy').single()
+    await supabase.from('tokens').insert({ tenant_id: tenant.id, student_id: profileModal.id, amount: final, reason: profileTokenNote || (sign > 0 ? 'added by admin' : 'removed by admin') })
+    setProfileTokens(prev => prev + final)
+    setProfileTokenAdjust('')
+    setProfileTokenNote('')
+    setMessage(`${sign > 0 ? 'Added' : 'Removed'} ${amt} token(s).`)
+  }
 
   // --- Block Calendar Logic ---
   const blockWeekDates = getWeekDates(blockWeekOffset)
@@ -558,18 +620,22 @@ export default function Admin() {
             <p style={{ color: '#666' }}>No students yet.</p>
           ) : (
             students.map(s => (
-              <div key={s.id} style={{ border: '1px solid #333', borderRadius: '8px', padding: '1rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#2a2a2a' }}>
+              <div
+                key={s.id}
+                onClick={() => openProfileModal(s)}
+                style={{ border: '1px solid #333', borderRadius: '8px', padding: '1rem', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#2a2a2a', cursor: 'pointer', transition: 'border-color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#cc0000'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = '#333'}
+              >
                 <div>
                   <p style={{ margin: 0, fontWeight: 'bold', color: '#fff' }}>{studentName(s)}</p>
-                  <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.9rem' }}>
-                    {s.belt_rank} belt
+                  <p style={{ margin: '0.2rem 0 0', color: '#666', fontSize: '0.85rem' }}>
+                    {s.belt_rank ? `${s.belt_rank} belt` : 'No belt set'}
+                    {s.phone && <span style={{ marginLeft: '0.75rem', color: '#555' }}>{s.phone}</span>}
                     {s.date_of_birth && <span style={{ marginLeft: '0.75rem' }}>🎂 {s.date_of_birth}</span>}
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => addTokens(s.id, 1)} style={{ padding: '0.4rem 0.9rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>+1</button>
-                  <button onClick={() => addTokens(s.id, 4)} style={{ padding: '0.4rem 0.9rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>+4</button>
-                </div>
+                <span style={{ color: '#444', fontSize: '0.8rem' }}>View →</span>
               </div>
             ))
           )}
@@ -706,6 +772,115 @@ export default function Admin() {
           </div>
         </div>
       )}
+      {/* ── STUDENT PROFILE MODAL ── */}
+      {profileModal && (
+        <div onClick={e => { if (e.target === e.currentTarget) closeProfileModal() }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '2rem 1rem', overflowY: 'auto' }}>
+          <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', width: '100%', maxWidth: '560px', padding: '1.75rem' }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div>
+                <div style={{ color: '#999', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Student Profile</div>
+                <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.15rem', marginTop: '0.2rem' }}>{studentName(profileModal)}</div>
+                <div style={{ color: '#555', fontSize: '0.8rem', marginTop: '0.1rem' }}>{profileModal.email}</div>
+              </div>
+              <button onClick={closeProfileModal} style={{ background: 'none', border: 'none', color: '#555', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+
+            {/* Token balance */}
+            <div style={{ background: '#111', border: '1px solid #cc0000', borderRadius: '8px', padding: '1rem 1.25rem', marginBottom: '1.25rem' }}>
+              <div style={{ color: '#cc0000', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Lesson Tokens</div>
+              <div style={{ color: '#fff', fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>{profileTokens}</div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <input
+                  type="number" min="1" placeholder="Amount"
+                  value={profileTokenAdjust}
+                  onChange={e => setProfileTokenAdjust(e.target.value)}
+                  style={{ width: '80px', padding: '0.4rem 0.5rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.9rem' }}
+                />
+                <input
+                  type="text" placeholder="Note (optional)"
+                  value={profileTokenNote}
+                  onChange={e => setProfileTokenNote(e.target.value)}
+                  style={{ flex: 1, minWidth: '120px', padding: '0.4rem 0.5rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.9rem' }}
+                />
+                <button onClick={() => applyTokenAdjust(1)} style={{ padding: '0.4rem 0.75rem', background: '#1a4a1a', color: '#66cc66', border: '1px solid #2a6a2a', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>+ Add</button>
+                <button onClick={() => applyTokenAdjust(-1)} style={{ padding: '0.4rem 0.75rem', background: '#2a1a1a', color: '#cc6666', border: '1px solid #6a2a2a', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>− Remove</button>
+              </div>
+            </div>
+
+            {/* Edit form */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+              {[
+                { label: 'First Name', key: 'firstName' },
+                { label: 'Last Name', key: 'lastName' },
+                { label: 'Phone', key: 'phone' },
+                { label: 'Date of Birth', key: 'dob', type: 'date' },
+              ].map(({ label, key, type }) => (
+                <div key={key}>
+                  <label style={{ display: 'block', color: '#666', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.25rem' }}>{label}</label>
+                  <input
+                    type={type || 'text'}
+                    value={profileEdit[key] || ''}
+                    onChange={e => setProfileEdit(prev => ({ ...prev, [key]: e.target.value }))}
+                    style={{ width: '100%', padding: '0.5rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+              ))}
+              <div>
+                <label style={{ display: 'block', color: '#666', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.25rem' }}>Belt Rank</label>
+                <select
+                  value={profileEdit.beltRank || ''}
+                  onChange={e => setProfileEdit(prev => ({ ...prev, beltRank: e.target.value }))}
+                  style={{ width: '100%', padding: '0.5rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.9rem' }}
+                >
+                  <option value="">— Not set —</option>
+                  {['White', 'Yellow', 'Orange', 'Green', 'Blue', 'Purple', 'Brown', 'Red', 'Black'].map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              <button
+                onClick={saveProfileEdit}
+                disabled={profileSaving}
+                style={{ flex: 1, padding: '0.65rem', background: profileSaving ? '#555' : '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: profileSaving ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+              >{profileSaving ? 'Saving…' : 'Save Changes'}</button>
+              <a
+                href={`/admin/book`}
+                style={{ padding: '0.65rem 1rem', background: '#2a2a2a', color: '#ccc', border: '1px solid #444', borderRadius: '6px', textDecoration: 'none', fontSize: '0.9rem', display: 'flex', alignItems: 'center' }}
+              >+ Book Lesson</a>
+            </div>
+
+            {/* Upcoming bookings */}
+            <div>
+              <div style={{ color: '#666', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.6rem' }}>Upcoming Lessons</div>
+              {profileBookings.length === 0 ? (
+                <p style={{ color: '#444', fontSize: '0.85rem', margin: 0 }}>No upcoming lessons.</p>
+              ) : (
+                profileBookings.map(b => (
+                  <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: '#111', border: '1px solid #2a2a2a', borderRadius: '6px', marginBottom: '0.4rem' }}>
+                    <span style={{ color: '#ccc', fontSize: '0.875rem' }}>{b.slots.slot_date} · {formatHour(b.slots.start_hour)}</span>
+                    <button
+                      onClick={async () => {
+                        await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin' }).eq('id', b.id)
+                        await supabase.from('tokens').insert({ tenant_id: bookings.find(x => x.id === b.id)?.tenant_id, student_id: profileModal.id, amount: 1, reason: 'cancelled by admin - refund', booking_id: b.id })
+                        setProfileBookings(prev => prev.filter(x => x.id !== b.id))
+                        loadData()
+                      }}
+                      style={{ padding: '0.2rem 0.6rem', background: 'transparent', color: '#884444', border: '1px solid #442222', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                    >Cancel</button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── QUICK-BOOK MODAL ── */}
       {bookModal && (
         <div
