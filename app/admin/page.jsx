@@ -69,7 +69,13 @@ export default function Admin() {
   const [blockSlotReason, setBlockSlotReason] = useState('')
 
   // Weekly calendar state
-  const [activeTab, setActiveTab] = useState('week') // 'week' | 'bookings' | 'students' | 'block'
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('tab')
+      if (p) return p
+    }
+    return 'week'
+  })
   const [weekOffset, setWeekOffset] = useState(0)
 
   // Quick-book modal state
@@ -396,7 +402,7 @@ export default function Admin() {
       })
       const d = await res.json()
       if (res.ok) {
-        window.location.reload()
+        window.location.href = '/admin?tab=students'
       } else {
         setProfileDeleting(false)
         setProfileDeleteError(d.error || 'Unknown error')
