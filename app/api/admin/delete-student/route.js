@@ -20,10 +20,9 @@ export async function POST(request) {
   const { error: e1 } = await supabaseAdmin.from('tokens').delete().eq('student_id', studentId)
   if (e1) return Response.json({ error: 'delete tokens: ' + e1.message }, { status: 500 })
 
-  // 2. Delete sent_reminders (sent_reminders.booking_id -> bookings.id)
+  // 2. Delete sent_reminders — ignore error if table doesn't exist yet
   if (bookingIds.length > 0) {
-    const { error: e2 } = await supabaseAdmin.from('sent_reminders').delete().in('booking_id', bookingIds)
-    if (e2) return Response.json({ error: 'delete sent_reminders: ' + e2.message }, { status: 500 })
+    await supabaseAdmin.from('sent_reminders').delete().in('booking_id', bookingIds)
   }
 
   // 3. Delete bookings
