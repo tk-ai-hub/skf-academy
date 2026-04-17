@@ -17,16 +17,16 @@ export async function POST(request) {
 
   const bookingIds = (studentBookings || []).map(b => b.id)
 
-  // Delete sent_reminders for those bookings (FK: sent_reminders.booking_id)
+  // Delete tokens first (tokens.booking_id -> bookings.id)
+  await supabaseAdmin.from('tokens').delete().eq('student_id', studentId)
+
+  // Delete sent_reminders (sent_reminders.booking_id -> bookings.id)
   if (bookingIds.length > 0) {
     await supabaseAdmin.from('sent_reminders').delete().in('booking_id', bookingIds)
   }
 
-  // Delete bookings (FK: bookings.student_id -> users.id)
+  // Now safe to delete bookings (bookings.student_id -> users.id)
   await supabaseAdmin.from('bookings').delete().eq('student_id', studentId)
-
-  // Delete tokens
-  await supabaseAdmin.from('tokens').delete().eq('student_id', studentId)
 
   // Delete push subscriptions
   await supabaseAdmin.from('push_subscriptions').delete().eq('user_id', studentId)
