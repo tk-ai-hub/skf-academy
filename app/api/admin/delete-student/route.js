@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return Response.json({ error: 'SUPABASE_SERVICE_ROLE_KEY is not set in environment' }, { status: 500 })
+  }
+
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
