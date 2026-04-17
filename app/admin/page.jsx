@@ -1113,9 +1113,9 @@ export default function Admin() {
               {!profileDeleteConfirm ? (
                 <button
                   onClick={() => setProfileDeleteConfirm(true)}
-                  style={{ width: '100%', padding: '0.6rem', background: 'transparent', border: '1px solid #442222', borderRadius: '6px', color: '#884444', cursor: 'pointer', fontSize: '0.85rem' }}
+                  style={{ width: '100%', padding: '0.7rem', background: '#2a0000', border: '1px solid #cc0000', borderRadius: '6px', color: '#ff6666', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }}
                 >
-                  Delete Student Account
+                  🗑 Delete Student Account
                 </button>
               ) : (
                 <div style={{ background: '#1a0000', border: '1px solid #6a2222', borderRadius: '8px', padding: '1rem' }}>
