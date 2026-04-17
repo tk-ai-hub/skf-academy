@@ -36,9 +36,11 @@ export async function POST(request) {
   const { error: e5 } = await supabaseAdmin.from('users').delete().eq('id', studentId)
   if (e5) return Response.json({ error: 'delete users row: ' + e5.message }, { status: 500 })
 
-  // 6. Delete auth user
+  // 6. Delete auth user (ignore "User not found" — profile row may have been created without auth)
   const { error: e6 } = await supabaseAdmin.auth.admin.deleteUser(studentId)
-  if (e6) return Response.json({ error: 'delete auth user: ' + e6.message }, { status: 500 })
+  if (e6 && !e6.message.toLowerCase().includes('not found') && !e6.message.toLowerCase().includes('user not found')) {
+    return Response.json({ error: 'delete auth user: ' + e6.message }, { status: 500 })
+  }
 
   return Response.json({ success: true })
 }

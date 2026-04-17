@@ -369,6 +369,9 @@ export default function Admin() {
     setProfileBookings([])
     setProfilePastBookings([])
     setProfileBookingTab('upcoming')
+    setProfileDeleteConfirm(false)
+    setProfileDeleting(false)
+    setProfileDeleteError('')
     const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', s.id)
     setProfileTokens((tokenData || []).reduce((sum, t) => sum + t.amount, 0))
     const today = new Date().toISOString().split('T')[0]
