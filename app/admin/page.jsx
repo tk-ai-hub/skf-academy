@@ -110,6 +110,7 @@ export default function Admin() {
   const [profileBookingTab, setProfileBookingTab] = useState('upcoming')
   const [profileDeleteConfirm, setProfileDeleteConfirm] = useState(false)
   const [profileDeleting, setProfileDeleting] = useState(false)
+  const [profileDeleteError, setProfileDeleteError] = useState('')
 
   useEffect(() => { loadData(); loadTokenBalances() }, [])
   useEffect(() => { loadBlockCalSlots() }, [blockWeekOffset])
@@ -381,6 +382,7 @@ export default function Admin() {
     setProfilePastBookings([])
     setProfileDeleteConfirm(false)
     setProfileDeleting(false)
+    setProfileDeleteError('')
   }
 
   async function deleteStudent() {
@@ -399,8 +401,7 @@ export default function Admin() {
     } else {
       const d = await res.json()
       setProfileDeleting(false)
-      setProfileDeleteConfirm(false)
-      setMessage('Delete failed: ' + (d.error || 'Unknown error'))
+      setProfileDeleteError(d.error || 'Unknown error')
     }
   }
 
@@ -1124,9 +1125,14 @@ export default function Admin() {
                   <p style={{ color: '#884444', margin: '0 0 1rem', fontSize: '0.82rem', lineHeight: 1.5 }}>
                     This will cancel all upcoming bookings and permanently delete the account. This cannot be undone.
                   </p>
+                  {profileDeleteError && (
+                    <p style={{ color: '#ff4444', background: '#2a0000', border: '1px solid #660000', borderRadius: '6px', padding: '0.5rem 0.75rem', fontSize: '0.82rem', margin: '0 0 0.75rem' }}>
+                      Error: {profileDeleteError}
+                    </p>
+                  )}
                   <div style={{ display: 'flex', gap: '0.6rem' }}>
                     <button
-                      onClick={() => setProfileDeleteConfirm(false)}
+                      onClick={() => { setProfileDeleteConfirm(false); setProfileDeleteError('') }}
                       style={{ flex: 1, padding: '0.6rem', background: 'transparent', border: '1px solid #333', borderRadius: '6px', color: '#888', cursor: 'pointer', fontSize: '0.9rem' }}
                     >Cancel</button>
                     <button
