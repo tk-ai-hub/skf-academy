@@ -9,22 +9,35 @@ export async function POST(request) {
   const { studentId } = await request.json()
   if (!studentId) return Response.json({ error: 'studentId is required' }, { status: 400 })
 
-  // Cancel all their bookings (no refund — admin delete)
-  await supabaseAdmin
+  // Get all booking IDs for this student
+  const { data: studentBookings } = await supabaseAdmin
     .from('bookings')
-    .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin' })
+    .select('id')
     .eq('student_id', studentId)
-    .in('status', ['confirmed', 'pending_token'])
+
+  const bookingIds = (studentBookings || []).map(b => b.id)
+
+  // Delete sent_reminders for those bookings (FK: sent_reminders.booking_id)
+  if (bookingIds.length > 0) {
+    await supabaseAdmin.from('sent_reminders').delete().in('booking_id', bookingIds)
+  }
+
+  // Delete bookings (FK: bookings.student_id -> users.id)
+  await supabaseAdmin.from('bookings').delete().eq('student_id', studentId)
 
   // Delete tokens
   await supabaseAdmin.from('tokens').delete().eq('student_id', studentId)
 
+  // Delete push subscriptions
+  await supabaseAdmin.from('push_subscriptions').delete().eq('user_id', studentId)
+
   // Delete user profile row
-  await supabaseAdmin.from('users').delete().eq('id', studentId)
+  const { error: userError } = await supabaseAdmin.from('users').delete().eq('id', studentId)
+  if (userError) return Response.json({ error: 'Could not delete user profile: ' + userError.message }, { status: 500 })
 
   // Delete auth user (must be last)
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(studentId)
-  if (error) return Response.json({ error: 'Could not delete auth user: ' + error.message }, { status: 500 })
+  const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(studentId)
+  if (authError) return Response.json({ error: 'Could not delete auth user: ' + authError.message }, { status: 500 })
 
   return Response.json({ success: true })
 }
