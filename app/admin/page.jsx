@@ -388,20 +388,22 @@ export default function Admin() {
   async function deleteStudent() {
     if (!profileModal || profileDeleting) return
     setProfileDeleting(true)
-    const res = await fetch('/api/admin/delete-student', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId: profileModal.id })
-    })
-    if (res.ok) {
-      setStudents(prev => prev.filter(s => s.id !== profileModal.id))
-      setTokenBalances(prev => { const n = { ...prev }; delete n[profileModal.id]; return n })
-      closeProfileModal()
-      loadData()
-    } else {
+    try {
+      const res = await fetch('/api/admin/delete-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: profileModal.id })
+      })
       const d = await res.json()
+      if (res.ok) {
+        window.location.reload()
+      } else {
+        setProfileDeleting(false)
+        setProfileDeleteError(d.error || 'Unknown error')
+      }
+    } catch (err) {
       setProfileDeleting(false)
-      setProfileDeleteError(d.error || 'Unknown error')
+      setProfileDeleteError(err.message || 'Network error')
     }
   }
 
