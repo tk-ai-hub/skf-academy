@@ -4,12 +4,6 @@ import webpush from 'web-push'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-webpush.setVapidDetails(
-  `mailto:${process.env.VAPID_EMAIL}`,
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-)
-
 const INTERVALS = [
   { label: '48h', hours: 48, text: '48 hours' },
   { label: '24h', hours: 24, text: '24 hours' },
@@ -42,6 +36,12 @@ export async function GET(request) {
   if (request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  webpush.setVapidDetails(
+    `mailto:${process.env.VAPID_EMAIL}`,
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  )
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
