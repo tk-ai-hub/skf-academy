@@ -12,6 +12,16 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 10)
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+const GROUP_CLASSES = [
+  { name: 'Kids Class', days: [2, 4], hour: 18, color: '#0a1f0a', border: '#2a6a2a', textColor: '#66cc66' },
+  { name: 'Skill Class', days: [2, 4], hour: 21, color: '#0a1020', border: '#1a4a8a', textColor: '#6699cc' },
+]
+
+function getGroupClass(date, hour) {
+  const dow = new Date(date + 'T00:00:00').getDay()
+  return GROUP_CLASSES.find(c => c.days.includes(dow) && c.hour === hour) || null
+}
+
 function getWeekDates(weekOffset) {
   const now = new Date()
   const local = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -646,60 +656,80 @@ export default function Admin() {
                           verticalAlign: 'top',
                           minHeight: '48px'
                         }}>
-                          {blockedReason ? (
-                            <div style={{
-                              background: 'repeating-linear-gradient(45deg, #1a1a1a, #1a1a1a 4px, #141414 4px, #141414 8px)',
-                              border: '1px solid #2a2a2a',
-                              borderRadius: '5px',
-                              padding: '0.3rem 0.4rem',
-                              minHeight: '42px',
-                              display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-                              gap: '2px'
-                            }}>
-                              <span style={{ fontSize: '0.7rem' }}>🔒</span>
-                              <span style={{ color: '#555', fontSize: '0.62rem', textAlign: 'center', lineHeight: 1.2 }}>
-                                {blockedReason}
-                              </span>
-                            </div>
-                          ) : cellBookings.length > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                              {cellBookings.map(booking => (
-                                <div key={booking.id} style={{
-                                  background: '#2a0000',
-                                  border: '1px solid #cc0000',
-                                  borderRadius: '5px',
-                                  padding: '0.3rem 0.4rem',
-                                  cursor: 'default'
-                                }}>
-                                  <div style={{ color: '#fff', fontSize: '0.78rem', fontWeight: 'bold', lineHeight: 1.3 }}>
-                                    {studentNameById(students, booking.student_id)}
+                          {(() => {
+                            const groupClass = getGroupClass(date, hour)
+                            if (blockedReason) return (
+                              <div style={{
+                                background: 'repeating-linear-gradient(45deg, #1a1a1a, #1a1a1a 4px, #141414 4px, #141414 8px)',
+                                border: '1px solid #2a2a2a',
+                                borderRadius: '5px',
+                                padding: '0.3rem 0.4rem',
+                                minHeight: '42px',
+                                display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+                                gap: '2px'
+                              }}>
+                                <span style={{ fontSize: '0.7rem' }}>🔒</span>
+                                <span style={{ color: '#555', fontSize: '0.62rem', textAlign: 'center', lineHeight: 1.2 }}>
+                                  {blockedReason}
+                                </span>
+                              </div>
+                            )
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                {cellBookings.map(booking => (
+                                  <div key={booking.id} style={{
+                                    background: '#2a0000',
+                                    border: '1px solid #cc0000',
+                                    borderRadius: '5px',
+                                    padding: '0.3rem 0.4rem',
+                                    cursor: 'default'
+                                  }}>
+                                    <div style={{ color: '#fff', fontSize: '0.78rem', fontWeight: 'bold', lineHeight: 1.3 }}>
+                                      {studentNameById(students, booking.student_id)}
+                                    </div>
+                                    <div style={{ color: '#cc0000', fontSize: '0.68rem', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                      Private Lesson
+                                    </div>
+                                    <button
+                                      onClick={() => cancelBooking(booking)}
+                                      style={{
+                                        marginTop: '4px', padding: '1px 5px', fontSize: '0.65rem',
+                                        background: 'transparent', color: '#884444',
+                                        border: '1px solid #442222', borderRadius: '3px', cursor: 'pointer'
+                                      }}
+                                    >cancel</button>
                                   </div>
-                                  <div style={{ color: '#cc0000', fontSize: '0.68rem', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                    Private Lesson
+                                ))}
+                                {groupClass && (
+                                  <div style={{
+                                    background: groupClass.color,
+                                    border: `1px solid ${groupClass.border}`,
+                                    borderRadius: '5px',
+                                    padding: '0.3rem 0.4rem',
+                                  }}>
+                                    <div style={{ color: groupClass.textColor, fontSize: '0.72rem', fontWeight: 'bold', lineHeight: 1.3 }}>
+                                      {groupClass.name}
+                                    </div>
+                                    <div style={{ color: groupClass.textColor, fontSize: '0.62rem', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                      Group Class
+                                    </div>
                                   </div>
+                                )}
+                                {cellBookings.length === 0 && !groupClass && (
                                   <button
-                                    onClick={() => cancelBooking(booking)}
+                                    onClick={() => openBookModal(date, hour)}
                                     style={{
-                                      marginTop: '4px', padding: '1px 5px', fontSize: '0.65rem',
-                                      background: 'transparent', color: '#884444',
-                                      border: '1px solid #442222', borderRadius: '3px', cursor: 'pointer'
+                                      width: '100%', height: '42px', background: 'transparent', border: 'none',
+                                      color: '#333', fontSize: '1.2rem', cursor: 'pointer', borderRadius: '4px',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center'
                                     }}
-                                  >cancel</button>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => openBookModal(date, hour)}
-                              style={{
-                                width: '100%', height: '42px', background: 'transparent', border: 'none',
-                                color: '#333', fontSize: '1.2rem', cursor: 'pointer', borderRadius: '4px',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center'
-                              }}
-                              onMouseEnter={e => { e.currentTarget.style.color = '#cc0000'; e.currentTarget.style.background = '#1a0000' }}
-                              onMouseLeave={e => { e.currentTarget.style.color = '#333'; e.currentTarget.style.background = 'transparent' }}
-                            >+</button>
-                          )}
+                                    onMouseEnter={e => { e.currentTarget.style.color = '#cc0000'; e.currentTarget.style.background = '#1a0000' }}
+                                    onMouseLeave={e => { e.currentTarget.style.color = '#333'; e.currentTarget.style.background = 'transparent' }}
+                                  >+</button>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </td>
                       )
                     })}
