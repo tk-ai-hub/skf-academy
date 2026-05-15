@@ -127,6 +127,7 @@ export default function Admin() {
   const [profileDeleteConfirm, setProfileDeleteConfirm] = useState(false)
   const [profileDeleting, setProfileDeleting] = useState(false)
   const [profileDeleteError, setProfileDeleteError] = useState('')
+  const [profileNotifySkillClass, setProfileNotifySkillClass] = useState(true)
 
   useEffect(() => { loadData(); loadTokenBalances() }, [])
   useEffect(() => { loadBlockCalSlots() }, [blockWeekOffset])
@@ -382,6 +383,8 @@ export default function Admin() {
     setProfileDeleteConfirm(false)
     setProfileDeleting(false)
     setProfileDeleteError('')
+    const { data: prefData } = await supabase.from('users').select('notify_skill_class').eq('id', s.id).single()
+    setProfileNotifySkillClass(prefData?.notify_skill_class !== false)
     const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', s.id)
     setProfileTokens((tokenData || []).reduce((sum, t) => sum + t.amount, 0))
     const today = new Date().toISOString().split('T')[0]
@@ -402,6 +405,7 @@ export default function Admin() {
     setProfileDeleteConfirm(false)
     setProfileDeleting(false)
     setProfileDeleteError('')
+    setProfileNotifySkillClass(true)
   }
 
   async function deleteStudent() {
@@ -1076,6 +1080,33 @@ export default function Admin() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            {/* Skill Class notification toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#111', border: '1px solid #2a2a2a', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+              <div>
+                <div style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>Skill Development Class Notifications</div>
+                <div style={{ color: '#555', fontSize: '0.78rem', marginTop: '0.15rem' }}>Tue & Thu 9 PM reminders</div>
+              </div>
+              <button
+                onClick={async () => {
+                  const newVal = !profileNotifySkillClass
+                  setProfileNotifySkillClass(newVal)
+                  await fetch('/api/admin/update-student', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId: profileModal.id, notifySkillClass: newVal })
+                  })
+                }}
+                style={{
+                  width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0,
+                  background: profileNotifySkillClass ? '#cc0000' : '#333', position: 'relative', transition: 'background 0.2s'
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: '3px', left: profileNotifySkillClass ? '22px' : '3px',
+                  width: '18px', height: '18px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s'
+                }} />
+              </button>
             </div>
 
             <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>

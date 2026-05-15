@@ -161,11 +161,12 @@ export async function GET(request) {
   if (nowVan.getDay() === 2 || nowVan.getDay() === 4) { // Tuesday or Thursday
     const { data: skillStudents } = await supabase
       .from('users')
-      .select('id, email, first_name')
+      .select('id, email, first_name, notify_skill_class')
       .eq('role', 'student')
 
     for (const student of (skillStudents || [])) {
       if (!student.email || student.email.includes('@skf-academy.internal')) continue
+      if (student.notify_skill_class === false) continue
 
       const dayName = nowVan.getDay() === 2 ? 'Tuesday' : 'Thursday'
 

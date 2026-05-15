@@ -6,7 +6,7 @@ export async function POST(request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  const { studentId, firstName, lastName, phone, dob, beltRank } = await request.json()
+  const { studentId, firstName, lastName, phone, dob, beltRank, notifySkillClass } = await request.json()
 
   if (!studentId) return Response.json({ error: 'studentId is required' }, { status: 400 })
 
@@ -19,6 +19,7 @@ export async function POST(request) {
   if (phone !== undefined) updates.phone = phone
   if (dob !== undefined) updates.date_of_birth = dob || null
   if (beltRank !== undefined) updates.belt_rank = beltRank
+  if (notifySkillClass !== undefined) updates.notify_skill_class = notifySkillClass
 
   const { error } = await supabaseAdmin.from('users').update(updates).eq('id', studentId)
 
