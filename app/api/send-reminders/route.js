@@ -157,7 +157,46 @@ export async function GET(request) {
     }
   }
 
-  // --- No upcoming booking notifications (runs every Monday) ---
+  // --- Skill Development Class reminder (every Tuesday & Thursday) ---
+  if (nowVan.getDay() === 2 || nowVan.getDay() === 4) { // Tuesday or Thursday
+    const { data: skillStudents } = await supabase
+      .from('users')
+      .select('id, email, first_name')
+      .eq('role', 'student')
+
+    for (const student of (skillStudents || [])) {
+      if (!student.email || student.email.includes('@skf-academy.internal')) continue
+
+      const dayName = nowVan.getDay() === 2 ? 'Tuesday' : 'Thursday'
+
+      // Send email
+      try {
+        await resend.emails.send({
+          from: 'SKF Academy <noreply@kungfubc.com>',
+          to: student.email,
+          subject: `🥋 Skill Development Class tonight at 9 PM — SKF Academy`,
+          html: `<div style="font-family:sans-serif;background:#111;color:#fff;padding:2rem;border-radius:8px;max-width:500px"><h2 style="color:#cc0000">🥋 Skill Development Class Tonight</h2><p>Hi ${student.first_name || 'there'},</p><p>Don't miss tonight's <strong>Skill Development Class at 9 PM</strong>!</p><p style="color:#ccc;">This class is designed to grow your skills at every level. Whether you're just starting out or have years of experience, tonight's session will help take your training to the next level.</p><div style="background:#0a1020;border:1px solid #1a4a8a;border-radius:8px;padding:1.25rem;margin:1.5rem 0"><div style="color:#6699cc;font-size:0.75rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.4rem">Tonight's Class</div><div style="color:#fff;font-weight:bold;font-size:1.1rem">${dayName} · 9:00 PM</div><div style="color:#aaa;font-size:0.9rem;margin-top:0.25rem">Skill Development — All Levels Welcome</div></div><p style="color:#999;font-size:0.9rem;">See you on the floor! 🙏</p><p style="color:#444;font-size:0.8rem;margin-top:2rem;">SKF Academy · Shaolin Kung Fu — Est. 1986</p></div>`
+        })
+      } catch(e) { console.error('Skill class email error:', e.message) }
+
+      // Send push notification
+      const subs = pushByUser[student.id] || []
+      const payload = JSON.stringify({
+        title: '🥋 Skill Development Class tonight at 9 PM',
+        body: 'Essential for growth at all levels — see you on the floor!',
+        url: '/dashboard',
+      })
+      for (const sub of subs) {
+        webpush.sendNotification(sub, payload).catch(async (err) => {
+          if (err.statusCode === 410) {
+            await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+          }
+        })
+      }
+    }
+  }
+
+  // --- No upcoming booking notifications (runs every Wednesday & Friday) ---
   const nowVan = new Date(now.toLocaleString('en-US', { timeZone: 'America/Vancouver' }))
   if (nowVan.getDay() === 3 || nowVan.getDay() === 5) { // Wednesday or Friday
     const today = now.toISOString().split('T')[0]
