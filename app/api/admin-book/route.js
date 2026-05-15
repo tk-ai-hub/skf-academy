@@ -128,6 +128,20 @@ export async function POST(request) {
   // Deduct token if registered student (not guest)
   if (studentId) {
     await supabaseAdmin.from('tokens').insert({ tenant_id: slot.tenant_id, student_id: userId, amount: -1, reason: 'lesson booked by admin', booking_id: booking.id })
+
+    // Check new balance and alert admin if low
+    const { data: tokenRows } = await supabaseAdmin.from('tokens').select('amount').eq('student_id', userId)
+    const newBalance = (tokenRows || []).reduce((sum, t) => sum + t.amount, 0)
+    if (newBalance <= 1) {
+      try {
+        await resend.emails.send({
+          from: 'SKF Academy <noreply@kungfubc.com>',
+          to: 'kungfuscheduling@gmail.com',
+          subject: newBalance === 0 ? `⚠️ ${studentName} is out of tokens` : `⚠️ ${studentName} has 1 token left`,
+          html: `<div style="font-family:sans-serif;background:#111;color:#fff;padding:2rem;border-radius:8px;max-width:500px"><h2 style="color:#cc0000">Low Token Alert</h2><p><strong>${studentName}</strong> now has <strong style="color:${newBalance === 0 ? '#cc0000' : '#cc8800'}">${newBalance} token${newBalance === 1 ? '' : 's'}</strong> remaining.</p><a href="https://app.kungfubc.com/admin" style="display:inline-block;margin-top:1rem;padding:0.75rem 1.5rem;background:#cc0000;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold">View Admin</a></div>`
+        })
+      } catch(e) { console.error('Low token alert error:', e.message) }
+    }
   }
 
   const h = slot.start_hour
