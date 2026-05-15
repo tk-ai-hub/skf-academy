@@ -13,11 +13,25 @@ async function deleteCalEvent(slotDate, slotHour) {
     const { google } = await import('googleapis')
     const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY), scopes: ['https://www.googleapis.com/auth/calendar'] })
     const cal = google.calendar({ version: 'v3', auth })
-    const h = String(slotHour).padStart(2, '0')
-    const h2 = String(slotHour + 1).padStart(2, '0')
-    const events = await cal.events.list({ calendarId: process.env.GOOGLE_CALENDAR_ID, timeMin: slotDate+'T'+h+':00:00-08:00', timeMax: slotDate+'T'+h2+':00:00-08:00', singleEvents: true })
+    // Search the full day in UTC (wide enough to cover Vancouver in both PST and PDT)
+    const timeMin = slotDate + 'T07:00:00Z'  // midnight Vancouver PDT (UTC-7)
+    const timeMax = slotDate + 'T08:00:00Z'  // add 25h window
+    const dayEnd = new Date(slotDate + 'T07:00:00Z')
+    dayEnd.setUTCHours(dayEnd.getUTCHours() + 25)
+    const events = await cal.events.list({
+      calendarId: process.env.GOOGLE_CALENDAR_ID,
+      timeMin,
+      timeMax: dayEnd.toISOString(),
+      singleEvents: true
+    })
     for (const e of events.data.items || []) {
-      await cal.events.delete({ calendarId: process.env.GOOGLE_CALENDAR_ID, eventId: e.id })
+      const start = e.start?.dateTime
+      if (!start) continue
+      // Check the hour in Vancouver timezone (handles both PST and PDT automatically)
+      const vanHour = parseInt(new Date(start).toLocaleString('en-CA', { timeZone: 'America/Vancouver', hour: 'numeric', hour12: false }))
+      if (vanHour === slotHour) {
+        await cal.events.delete({ calendarId: process.env.GOOGLE_CALENDAR_ID, eventId: e.id })
+      }
     }
   } catch (e) { console.error('Calendar delete:', e.message) }
 }
