@@ -157,5 +157,58 @@ export async function GET(request) {
     }
   }
 
+  // --- No upcoming booking notifications (runs every Monday) ---
+  const nowVan = new Date(now.toLocaleString('en-US', { timeZone: 'America/Vancouver' }))
+  if (nowVan.getDay() === 1) { // Monday
+    const today = now.toISOString().split('T')[0]
+    const in7Days = new Date(now.getTime() + 7 * 86400000).toISOString().split('T')[0]
+
+    // Get all active students with real emails
+    const { data: allStudents } = await supabase
+      .from('users')
+      .select('id, email, first_name')
+      .eq('role', 'student')
+
+    // Get all confirmed bookings in next 7 days
+    const { data: upcomingBookings } = await supabase
+      .from('bookings')
+      .select('student_id, slots!bookings_slot_id_fkey(slot_date)')
+      .eq('status', 'confirmed')
+      .gte('slots.slot_date', today)
+      .lte('slots.slot_date', in7Days)
+
+    const studentsWithBooking = new Set((upcomingBookings || []).filter(b => b.slots).map(b => b.student_id))
+
+    for (const student of (allStudents || [])) {
+      if (!student.email || student.email.includes('@skf-academy.internal')) continue
+      if (studentsWithBooking.has(student.id)) continue
+
+      // Send email
+      try {
+        await resend.emails.send({
+          from: 'SKF Academy <noreply@kungfubc.com>',
+          to: student.email,
+          subject: '📅 No lesson booked this week — SKF Academy',
+          html: `<div style="font-family:sans-serif;background:#111;color:#fff;padding:2rem;border-radius:8px;max-width:500px"><h2 style="color:#cc0000">No Lesson This Week</h2><p>Hi ${student.first_name || 'there'},</p><p>You don't have a private lesson booked for the next 7 days. Keep up your training — book a slot now!</p><a href="https://app.kungfubc.com/book" style="display:inline-block;margin-top:1rem;padding:0.75rem 1.5rem;background:#cc0000;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold">Book a Lesson</a><p style="color:#444;font-size:0.8rem;margin-top:2rem;">SKF Academy · Shaolin Kung Fu — Est. 1986</p></div>`
+        })
+      } catch(e) { console.error('No-booking email error:', e.message) }
+
+      // Send push notification
+      const subs = pushByUser[student.id] || []
+      const payload = JSON.stringify({
+        title: '📅 No lesson booked this week',
+        body: 'Keep up your training — tap to book a lesson.',
+        url: '/book',
+      })
+      for (const sub of subs) {
+        webpush.sendNotification(sub, payload).catch(async (err) => {
+          if (err.statusCode === 410) {
+            await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+          }
+        })
+      }
+    }
+  }
+
   return Response.json({ sent: results.filter(r => r.status === 'sent').length, results })
 }
