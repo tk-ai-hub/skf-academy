@@ -448,9 +448,14 @@ export default function Dashboard() {
             })
           )}
 
-          <a href="/book" style={{ display: 'inline-block', marginTop: '1rem', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
-            + Book a Lesson
-          </a>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+            <a href="/book" style={{ display: 'inline-block', padding: '0.75rem 2rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.9rem' }}>
+              + Book a Lesson
+            </a>
+            <a href="/library" style={{ display: 'inline-block', padding: '0.75rem 1.5rem', background: '#2a2a2a', color: '#aaa', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.9rem', border: '1px solid #333' }}>
+              📚 Library
+            </a>
+          </div>
         </>
       )}
 

@@ -578,6 +578,7 @@ export default function Admin() {
             onClick={() => { setAddStudentModal(true); setAddStudentForm({}); setAddStudentError('') }}
             style={{ padding: '0.6rem 1.25rem', background: '#1a1a1a', color: '#fff', border: '2px solid #cc0000', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }}
           >+ Add Student</button>
+          <a href="/admin/library" style={{ padding: '0.6rem 1.25rem', background: '#1a1a1a', color: '#aaa', border: '2px solid #333', borderRadius: '6px', fontSize: '0.9rem', fontWeight: 'bold', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>📚 Library</a>
           <a href="/admin/book" style={{
             padding: '0.6rem 1.25rem',
             background: '#cc0000',
