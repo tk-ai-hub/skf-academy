@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { supabase } from '../../supabase'
+import { supabase } from '../../supabase' // used for auth check only
 
 const CATEGORIES = ['Techniques', 'Forms', 'Weapons', 'Conditioning', 'Theory', 'Other']
 
@@ -71,12 +71,12 @@ export default function AdminLibrary() {
     if (type === 'pdf' || type === 'video-file') {
       if (!file) { setError('Please select a file'); return }
       setUploading(true)
-      const ext = file.name.split('.').pop()
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-      const { data: upData, error: upErr } = await supabase.storage.from('library').upload(path, file, { upsert: false })
-      if (upErr) { setError('Upload failed: ' + upErr.message); setUploading(false); return }
-      const { data: { publicUrl } } = supabase.storage.from('library').getPublicUrl(path)
-      fileUrl = publicUrl
+      const fd = new FormData()
+      fd.append('file', file)
+      const upRes = await fetch('/api/library/upload', { method: 'POST', body: fd })
+      const upData = await upRes.json()
+      if (!upRes.ok) { setError(upData.error || 'Upload failed'); setUploading(false); return }
+      fileUrl = upData.url
       fileName = file.name
       resolvedType = type === 'pdf' ? 'pdf' : 'video'
     } else {
