@@ -71,87 +71,46 @@ export default function Dashboard() {
   const pastBookings = bookings.filter(b => b.slots.slot_date < today)
     .sort((a, b) => b.slots.slot_date.localeCompare(a.slots.slot_date) || b.slots.start_hour - a.slots.start_hour)
 
+  function slotTime(booking) {
+    return new Date(`${booking.slots.slot_date}T${String(booking.slots.start_hour).padStart(2, '0')}:00:00`)
+  }
+
+  function isWithin24h(booking) {
+    return (slotTime(booking) - new Date()) < 86400000
+  }
+
+  function isPast(booking) {
+    return slotTime(booking) < new Date()
+  }
+
   function handleCancelClick(booking) {
-    if (booking.slots.slot_date < today) return // past — no cancel
+    if (isPast(booking)) return // lesson already happened — no cancel
     if (booking.is_recurring && booking.recurring_group_id) {
       const seriesBookings = upcomingBookings.filter(
         b => b.recurring_group_id === booking.recurring_group_id && b.id !== booking.id
       )
       if (seriesBookings.length > 0) {
-        setCancelPrompt({ booking, hasSeries: true, seriesCount: seriesBookings.length + 1 })
+        setCancelPrompt({ booking, hasSeries: true, seriesCount: seriesBookings.length + 1, within24: isWithin24h(booking) })
         return
       }
     }
-    doCancel(booking, false)
+    setCancelPrompt({ booking, hasSeries: false, within24: isWithin24h(booking) })
   }
 
   async function doCancel(booking, cancelSeries) {
     setCancelPrompt(null)
-    const studentName = profile?.first_name
-      ? `${profile.last_name || ''} ${profile.first_name}`.trim()
-      : user.email
-
-    if (cancelSeries && booking.recurring_group_id) {
-      // Only cancel future bookings — never past ones
-      const futureInSeries = upcomingBookings.filter(
-        b => b.recurring_group_id === booking.recurring_group_id
-      )
-      for (const b of futureInSeries) {
-        await supabase.from('bookings')
-          .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
-          .eq('id', b.id)
-        await supabase.from('tokens').insert({
-          tenant_id: b.tenant_id,
-          student_id: b.student_id,
-          amount: 1,
-          reason: 'recurring series cancelled - refund',
-          booking_id: b.id
-        })
-        await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'cancellation',
-            studentEmail: user.email,
-            studentName,
-            phone: profile?.phone || '',
-            date: b.slots.slot_date,
-            time: formatHour(b.slots.start_hour),
-            hour: b.slots.start_hour
-          })
-        })
-      }
-      setBookings(prev => prev.filter(b =>
-        !(b.recurring_group_id === booking.recurring_group_id && b.slots.slot_date >= today)
-      ))
-      setBalance(prev => prev + futureInSeries.length)
-    } else {
-      await supabase.from('bookings')
-        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
-        .eq('id', booking.id)
-      await supabase.from('tokens').insert({
-        tenant_id: booking.tenant_id,
-        student_id: booking.student_id,
-        amount: 1,
-        reason: 'lesson cancelled - refund',
-        booking_id: booking.id
-      })
-      await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'cancellation',
-          studentEmail: user.email,
-          studentName,
-          phone: profile?.phone || '',
-          date: booking.slots.slot_date,
-          time: formatHour(booking.slots.start_hour),
-          hour: booking.slots.start_hour
-        })
-      })
-      setBookings(prev => prev.filter(b => b.id !== booking.id))
-      setBalance(prev => prev + 1)
-    }
+    const res = await fetch('/api/cancel-booking', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookingId: booking.id, cancelSeries })
+    })
+    const data = await res.json()
+    if (!res.ok) { alert(data.error || 'Cancellation failed'); return }
+    setBookings(prev => cancelSeries && booking.recurring_group_id
+      ? prev.filter(b => !(b.recurring_group_id === booking.recurring_group_id && !isPast(b)))
+      : prev.filter(b => b.id !== booking.id)
+    )
+    setBalance(prev => prev + (data.refunded || 0))
   }
 
   function groupBookings(list) {
@@ -268,33 +227,57 @@ export default function Dashboard() {
         }}>
           <div style={{ background: '#1a1a1a', border: '1px solid #cc0000', borderRadius: '12px', padding: '1.75rem', maxWidth: '380px', width: '100%' }}>
             <h3 style={{ color: '#fff', margin: '0 0 0.5rem', fontSize: '1.1rem' }}>Cancel Booking</h3>
-            <p style={{ color: '#999', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
-              This is part of a recurring series ({cancelPrompt.seriesCount} lessons). What would you like to cancel?
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <button
-                onClick={() => doCancel(cancelPrompt.booking, false)}
-                style={{ padding: '0.75rem', background: '#2a2a2a', color: '#fff', border: '1px solid #444', borderRadius: '8px', cursor: 'pointer', textAlign: 'left' }}
-              >
-                <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>This lesson only</div>
-                <div style={{ color: '#666', fontSize: '0.8rem' }}>
-                  Cancel {cancelPrompt.booking.slots.slot_date} at {formatHour(cancelPrompt.booking.slots.start_hour)} — refund 1 token
+
+            {/* 24h warning */}
+            {cancelPrompt.within24 && (
+              <div style={{ background: '#2a1500', border: '1px solid #aa5500', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+                <div style={{ color: '#ff8800', fontWeight: 'bold', fontSize: '0.85rem', marginBottom: '0.2rem' }}>⚠️ Within 24 hours — No Refund</div>
+                <div style={{ color: '#aa7744', fontSize: '0.8rem' }}>Your token will not be refunded as this lesson is less than 24 hours away.</div>
+              </div>
+            )}
+
+            {cancelPrompt.hasSeries ? (
+              <>
+                <p style={{ color: '#999', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+                  This is part of a recurring series ({cancelPrompt.seriesCount} lessons). What would you like to cancel?
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <button
+                    onClick={() => doCancel(cancelPrompt.booking, false)}
+                    style={{ padding: '0.75rem', background: '#2a2a2a', color: '#fff', border: '1px solid #444', borderRadius: '8px', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>This lesson only</div>
+                    <div style={{ color: '#666', fontSize: '0.8rem' }}>
+                      {cancelPrompt.within24 ? 'No token refund (within 24h)' : 'Refund 1 token'}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => doCancel(cancelPrompt.booking, true)}
+                    style={{ padding: '0.75rem', background: '#2a0000', color: '#fff', border: '1px solid #cc0000', borderRadius: '8px', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>All remaining lessons in this series</div>
+                    <div style={{ color: '#cc6666', fontSize: '0.8rem' }}>
+                      {cancelPrompt.within24 ? `This lesson: no refund. Future lessons: ${cancelPrompt.seriesCount - 1} tokens refunded` : `Refund ${cancelPrompt.seriesCount} tokens`}
+                    </div>
+                  </button>
+                  <button onClick={() => setCancelPrompt(null)} style={{ padding: '0.6rem', background: 'transparent', color: '#666', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer' }}>Keep my booking</button>
                 </div>
-              </button>
-              <button
-                onClick={() => doCancel(cancelPrompt.booking, true)}
-                style={{ padding: '0.75rem', background: '#2a0000', color: '#fff', border: '1px solid #cc0000', borderRadius: '8px', cursor: 'pointer', textAlign: 'left' }}
-              >
-                <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>All remaining lessons in this series</div>
-                <div style={{ color: '#cc6666', fontSize: '0.8rem' }}>
-                  Cancels all future scheduled lessons — refund {cancelPrompt.seriesCount} tokens
+              </>
+            ) : (
+              <>
+                <p style={{ color: '#999', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+                  {formatDate(cancelPrompt.booking.slots.slot_date)} at {formatHour(cancelPrompt.booking.slots.start_hour)}
+                  <br />{cancelPrompt.within24 ? 'Your token will not be refunded.' : 'You will receive a 1 token refund.'}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <button
+                    onClick={() => doCancel(cancelPrompt.booking, false)}
+                    style={{ padding: '0.75rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+                  >Confirm Cancellation</button>
+                  <button onClick={() => setCancelPrompt(null)} style={{ padding: '0.6rem', background: 'transparent', color: '#666', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer' }}>Keep my booking</button>
                 </div>
-              </button>
-              <button
-                onClick={() => setCancelPrompt(null)}
-                style={{ padding: '0.6rem', background: 'transparent', color: '#666', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer' }}
-              >Keep my booking</button>
-            </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -330,7 +313,7 @@ export default function Dashboard() {
                       <p style={{ margin: '0.2rem 0 0', color: '#cc0000', fontSize: '0.85rem' }}>{formatHour(b.slots.start_hour)} · Private Lesson</p>
                     </div>
                     <div style={{ display: 'flex', gap: '0.75rem' }}>
-                      <a href="/book" style={{ padding: '0.4rem 1rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '0.85rem' }}>Reschedule</a>
+                      {!isWithin24h(b) && <a href="/book" style={{ padding: '0.4rem 1rem', background: '#cc0000', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '0.85rem' }}>Reschedule</a>}
                       <button onClick={() => handleCancelClick(b)} style={{ padding: '0.4rem 1rem', background: 'transparent', color: '#cc0000', border: '1px solid #cc0000', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
                     </div>
                   </div>
