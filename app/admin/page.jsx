@@ -56,6 +56,7 @@ function getUpcomingBirthdays(students) {
 
 function studentName(s) {
   if (s?.first_name) return `${s.first_name} ${s.last_name || ''}`.trim()
+  if (s?.full_name) return s.full_name
   return s?.email || 'Unknown'
 }
 
@@ -145,7 +146,7 @@ export default function Admin() {
 
     const { data: studentData } = await supabase
       .from('users')
-      .select('id, full_name, first_name, last_name, email, belt_rank, date_of_birth')
+      .select('id, full_name, first_name, last_name, email, belt_rank, date_of_birth, phone')
       .eq('role', 'student')
     setStudents(studentData || [])
 
@@ -364,9 +365,10 @@ export default function Admin() {
   const bookModalFiltered = bookModalSearch.trim()
     ? students.filter(s => {
         const name = studentName(s).toLowerCase()
+        const fullName = (s.full_name || '').toLowerCase()
         const phone = (s.phone || '').replace(/\D/g, '')
         const q = bookModalSearch.toLowerCase().trim()
-        return name.includes(q) || phone.includes(q.replace(/\D/g, ''))
+        return name.includes(q) || fullName.includes(q) || phone.includes(q.replace(/\D/g, ''))
       })
     : students
 
