@@ -158,6 +158,7 @@ export async function GET(request) {
   }
 
   // --- Skill Development Class reminder (every Tuesday & Thursday) ---
+  const nowVan = new Date(now.toLocaleString('en-US', { timeZone: 'America/Vancouver' }))
   if (nowVan.getDay() === 2 || nowVan.getDay() === 4) { // Tuesday or Thursday
     const { data: skillStudents } = await supabase
       .from('users')
@@ -198,7 +199,6 @@ export async function GET(request) {
   }
 
   // --- No upcoming booking notifications (runs every Wednesday & Friday) ---
-  const nowVan = new Date(now.toLocaleString('en-US', { timeZone: 'America/Vancouver' }))
   if (nowVan.getDay() === 3 || nowVan.getDay() === 5) { // Wednesday or Friday
     const today = now.toISOString().split('T')[0]
     const in7Days = new Date(now.getTime() + 7 * 86400000).toISOString().split('T')[0]
