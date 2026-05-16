@@ -34,18 +34,33 @@ export async function POST(request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  const { studentId, guestFirstName, guestLastName, guestPhone, slotId, recurring, weeks } = await request.json()
+  const { studentId, guestFirstName, guestLastName, guestPhone, slotId, slotDate, slotHour, recurring, weeks } = await request.json()
 
-  if (!slotId) return Response.json({ error: 'slotId is required' }, { status: 400 })
+  if (!slotId && !(slotDate && slotHour !== undefined)) return Response.json({ error: 'slotId or slotDate+slotHour is required' }, { status: 400 })
   if (!studentId && !guestFirstName) return Response.json({ error: 'studentId or guest name is required' }, { status: 400 })
 
-  // Get slot
-  const { data: slot, error: slotError } = await supabaseAdmin
-    .from('slots')
-    .select('*')
-    .eq('id', slotId)
-    .single()
-  if (slotError || !slot) return Response.json({ error: 'Slot not found' }, { status: 404 })
+  // Get or create slot
+  let slot
+  if (slotId) {
+    const { data, error } = await supabaseAdmin.from('slots').select('*').eq('id', slotId).single()
+    if (error || !data) return Response.json({ error: 'Slot not found' }, { status: 404 })
+    slot = data
+  } else {
+    // Find existing slot by date+hour
+    const { data: existing } = await supabaseAdmin.from('slots').select('*').eq('slot_date', slotDate).eq('start_hour', slotHour).maybeSingle()
+    if (existing) {
+      slot = existing
+    } else {
+      // Create the slot on demand
+      const { data: tenant } = await supabaseAdmin.from('tenants').select('id').eq('slug', 'skf-academy').single()
+      if (!tenant) return Response.json({ error: 'Tenant not found' }, { status: 500 })
+      const { data: created, error: createError } = await supabaseAdmin.from('slots').insert({
+        tenant_id: tenant.id, slot_date: slotDate, start_hour: slotHour, capacity: 2
+      }).select().single()
+      if (createError || !created) return Response.json({ error: 'Could not create slot: ' + (createError?.message || 'unknown') }, { status: 500 })
+      slot = created
+    }
+  }
 
   // Check slot has capacity (max 2 bookings per slot)
   const { data: existing } = await supabaseAdmin

@@ -305,7 +305,7 @@ export default function Admin() {
   // --- Quick-book modal ---
   async function openBookModal(date, hour) {
     setBookModal({ date, hour })
-    setBookModalSlot(undefined) // undefined = loading, null = not found
+    setBookModalSlot({ slot_date: date, start_hour: hour }) // API will find-or-create
     setBookModalSearch('')
     setBookModalStudent(null)
     setBookModalIsGuest(false)
@@ -315,8 +315,6 @@ export default function Admin() {
     setBookModalProcessing(false)
     setBookModalSuccess(false)
     setBookModalError('')
-    const { data } = await supabase.from('slots').select('*').eq('slot_date', date).eq('start_hour', hour).maybeSingle()
-    setBookModalSlot(data || null)
   }
 
   function closeBookModal() {
@@ -339,8 +337,8 @@ export default function Admin() {
     setBookModalProcessing(true)
     setBookModalError('')
     const payload = bookModalIsGuest
-      ? { slotId: bookModalSlot.id, guestFirstName: bookModalGuestFirst.trim(), guestLastName: bookModalGuestLast.trim(), guestPhone: bookModalGuestPhone.trim() }
-      : { slotId: bookModalSlot.id, studentId: bookModalStudent.id }
+      ? { slotDate: bookModal.date, slotHour: bookModal.hour, guestFirstName: bookModalGuestFirst.trim(), guestLastName: bookModalGuestLast.trim(), guestPhone: bookModalGuestPhone.trim() }
+      : { slotDate: bookModal.date, slotHour: bookModal.hour, studentId: bookModalStudent.id }
     try {
       const res = await fetch('/api/admin-book', {
         method: 'POST',
@@ -1350,6 +1348,7 @@ export default function Admin() {
                         {bookModalFiltered.map(s => (
                           <div
                             key={s.id}
+                            onMouseDown={e => e.preventDefault()}
                             onClick={() => { setBookModalStudent(s); setBookModalSearch(studentName(s)) }}
                             style={{ padding: '0.65rem 0.9rem', cursor: 'pointer', borderBottom: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between' }}
                             onMouseEnter={e => e.currentTarget.style.background = '#2a2a2a'}
@@ -1397,14 +1396,6 @@ export default function Admin() {
                   </div>
                 )}
 
-                {bookModalSlot === undefined && (
-                  <p style={{ color: '#666', fontSize: '0.8rem', margin: '0 0 0.75rem' }}>Loading slot…</p>
-                )}
-                {bookModalSlot === null && (
-                  <p style={{ color: '#cc4444', fontSize: '0.85rem', margin: '0 0 0.75rem', padding: '0.5rem 0.75rem', background: '#2a0a0a', border: '1px solid #6a2a2a', borderRadius: '6px' }}>
-                    No slot exists for this time. Use the <strong>+ Book Lesson</strong> page instead.
-                  </p>
-                )}
                 {bookModalError && (
                   <p style={{ color: '#ff6666', fontSize: '0.85rem', margin: '0 0 0.75rem', padding: '0.5rem 0.75rem', background: '#2a0a0a', border: '1px solid #6a2a2a', borderRadius: '6px' }}>
                     {bookModalError}
