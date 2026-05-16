@@ -132,6 +132,7 @@ export default function Admin() {
   const [profileNotifySkillClass, setProfileNotifySkillClass] = useState(true)
   const [profileAwayMode, setProfileAwayMode] = useState(false)
   const [profileAwayUntil, setProfileAwayUntil] = useState(null)
+  const [profileAwayDateInput, setProfileAwayDateInput] = useState('')
   const [profileAwayLoading, setProfileAwayLoading] = useState(false)
 
   useEffect(() => {
@@ -422,6 +423,7 @@ export default function Admin() {
     setProfileNotifySkillClass(true)
     setProfileAwayMode(false)
     setProfileAwayUntil(null)
+    setProfileAwayDateInput('')
     setProfileAwayLoading(false)
   }
 
@@ -1131,43 +1133,75 @@ export default function Admin() {
               </button>
             </div>
 
-            {/* Away Mode toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: profileAwayMode ? '#1a1200' : '#111', border: `1px solid ${profileAwayMode ? '#886600' : '#2a2a2a'}`, borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
-              <div>
-                <div style={{ color: profileAwayMode ? '#ffcc00' : '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                  {profileAwayMode ? '🌴 Away Mode Active' : 'Away Mode'}
+            {/* Away Mode */}
+            <div style={{ background: profileAwayMode ? '#1a1200' : '#111', border: `1px solid ${profileAwayMode ? '#886600' : '#2a2a2a'}`, borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: profileAwayMode ? 0 : '0.5rem' }}>
+                <div>
+                  <div style={{ color: profileAwayMode ? '#ffcc00' : '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                    {profileAwayMode ? '🌴 Away Mode Active' : 'Away Mode'}
+                  </div>
+                  <div style={{ color: '#777', fontSize: '0.78rem', marginTop: '0.15rem' }}>
+                    {profileAwayMode
+                      ? (profileAwayUntil ? `Until ${new Date(profileAwayUntil + 'T00:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric' })}` : 'No return date set')
+                      : 'Pause lessons & notifications'}
+                  </div>
                 </div>
-                <div style={{ color: '#555', fontSize: '0.78rem', marginTop: '0.15rem' }}>
-                  {profileAwayMode
-                    ? (profileAwayUntil ? `Until ${new Date(profileAwayUntil + 'T00:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric' })}` : 'Indefinitely')
-                    : 'Pause lessons & notifications'}
-                </div>
+                <button
+                  onClick={async () => {
+                    if (profileAwayMode) {
+                      // Clear away
+                      setProfileAwayLoading(true)
+                      await fetch('/api/set-away', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: profileModal.id, clearAway: true })
+                      })
+                      setProfileAwayMode(false)
+                      setProfileAwayUntil(null)
+                      setProfileAwayDateInput('')
+                      setStudents(prev => prev.map(s => s.id === profileModal.id ? { ...s, away_mode: false } : s))
+                      setProfileAwayLoading(false)
+                    }
+                  }}
+                  disabled={profileAwayLoading || !profileAwayMode}
+                  style={{
+                    padding: profileAwayMode ? '0.4rem 0.85rem' : '0', width: profileAwayMode ? 'auto' : 0, overflow: 'hidden',
+                    background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px',
+                    cursor: profileAwayMode && !profileAwayLoading ? 'pointer' : 'default',
+                    fontWeight: 'bold', fontSize: '0.8rem', whiteSpace: 'nowrap', transition: 'all 0.2s', flexShrink: 0
+                  }}
+                >
+                  {profileAwayLoading ? '...' : 'Clear'}
+                </button>
               </div>
-              <button
-                onClick={async () => {
-                  setProfileAwayLoading(true)
-                  await fetch('/api/set-away', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: profileModal.id, clearAway: profileAwayMode })
-                  })
-                  const newAway = !profileAwayMode
-                  setProfileAwayMode(newAway)
-                  if (!newAway) setProfileAwayUntil(null)
-                  // Update students list so badge reflects immediately
-                  setStudents(prev => prev.map(s => s.id === profileModal.id ? { ...s, away_mode: newAway } : s))
-                  setProfileAwayLoading(false)
-                }}
-                disabled={profileAwayLoading}
-                style={{
-                  width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: profileAwayLoading ? 'default' : 'pointer', padding: 0, flexShrink: 0,
-                  background: profileAwayMode ? '#886600' : '#333', position: 'relative', transition: 'background 0.2s'
-                }}
-              >
-                <span style={{
-                  position: 'absolute', top: '3px', left: profileAwayMode ? '22px' : '3px',
-                  width: '18px', height: '18px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s'
-                }} />
-              </button>
+              {!profileAwayMode && (
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <input
+                    type="date"
+                    value={profileAwayDateInput}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={e => setProfileAwayDateInput(e.target.value)}
+                    style={{ flex: 1, padding: '0.5rem 0.6rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.85rem', colorScheme: 'dark' }}
+                    placeholder="Return date (optional)"
+                  />
+                  <button
+                    onClick={async () => {
+                      setProfileAwayLoading(true)
+                      await fetch('/api/set-away', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: profileModal.id, awayUntil: profileAwayDateInput || null })
+                      })
+                      setProfileAwayMode(true)
+                      setProfileAwayUntil(profileAwayDateInput || null)
+                      setStudents(prev => prev.map(s => s.id === profileModal.id ? { ...s, away_mode: true } : s))
+                      setProfileAwayLoading(false)
+                    }}
+                    disabled={profileAwayLoading}
+                    style={{ padding: '0.5rem 0.9rem', background: '#886600', color: '#ffcc00', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                  >
+                    {profileAwayLoading ? '...' : 'Set Away'}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
