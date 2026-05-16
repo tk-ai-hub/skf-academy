@@ -134,7 +134,13 @@ export default function Admin() {
   const [profileAwayUntil, setProfileAwayUntil] = useState(null)
   const [profileAwayLoading, setProfileAwayLoading] = useState(false)
 
-  useEffect(() => { loadData(); loadTokenBalances() }, [])
+  useEffect(() => {
+    loadData(); loadTokenBalances()
+    // Refresh student away status when tab becomes visible again
+    const onVisible = () => { if (document.visibilityState === 'visible') loadData() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
   useEffect(() => { loadBlockCalSlots() }, [blockWeekOffset])
 
   async function loadData() {
@@ -1144,8 +1150,11 @@ export default function Admin() {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userId: profileModal.id, clearAway: profileAwayMode })
                   })
-                  setProfileAwayMode(!profileAwayMode)
-                  if (profileAwayMode) setProfileAwayUntil(null)
+                  const newAway = !profileAwayMode
+                  setProfileAwayMode(newAway)
+                  if (!newAway) setProfileAwayUntil(null)
+                  // Update students list so badge reflects immediately
+                  setStudents(prev => prev.map(s => s.id === profileModal.id ? { ...s, away_mode: newAway } : s))
                   setProfileAwayLoading(false)
                 }}
                 disabled={profileAwayLoading}
