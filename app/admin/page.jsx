@@ -373,7 +373,31 @@ export default function Admin() {
       setBookModalProcessing(false)
       if (res.ok) {
         setBookModalSuccess(true)
-        loadData()
+
+        // Inject new booking directly into state so week view updates immediately
+        // (avoids RLS issues with re-fetching via anon client)
+        if (d.booking) {
+          const newBooking = {
+            ...d.booking,
+            slots: { id: d.booking.slot_id, slot_date: bookModal.date, start_hour: bookModal.hour }
+          }
+          setBookings(prev => [newBooking, ...prev.filter(b => b.id !== newBooking.id)])
+        }
+
+        // Add guest student to students list if not already there
+        if (bookModalIsGuest && d.studentId) {
+          const guestStudent = {
+            id: d.studentId,
+            first_name: bookModalGuestFirst.trim(),
+            last_name: bookModalGuestLast.trim(),
+            full_name: [bookModalGuestFirst.trim(), bookModalGuestLast.trim()].filter(Boolean).join(' '),
+            phone: bookModalGuestPhone.trim(),
+            email: '',
+            role: 'student'
+          }
+          setStudents(prev => prev.some(s => s.id === d.studentId) ? prev : [...prev, guestStudent])
+        }
+
         setTimeout(() => closeBookModal(), 2000)
       } else {
         setBookModalError(d.error || 'Booking failed. Please try again.')
