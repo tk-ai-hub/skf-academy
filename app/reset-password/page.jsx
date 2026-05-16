@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
 export default function ResetPassword() {
@@ -8,6 +8,21 @@ export default function ResetPassword() {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    async function verifyToken() {
+      const params = new URLSearchParams(window.location.search)
+      const token_hash = params.get('token_hash')
+      const type = params.get('type')
+      if (token_hash && type === 'recovery') {
+        const { error } = await supabase.auth.verifyOtp({ token_hash, type: 'recovery' })
+        if (error) { setMessage('Reset link is invalid or has expired. Please request a new one.'); return }
+      }
+      setReady(true)
+    }
+    verifyToken()
+  }, [])
 
   async function handleReset() {
     if (!password) { setMessage('Please enter a new password.'); return }
@@ -51,14 +66,23 @@ export default function ResetPassword() {
       </p>
 
       <div style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '2rem' }}>
-        {done ? (
+        {!ready && !message && (
+          <p style={{ color: '#666', textAlign: 'center' }}>Verifying reset link…</p>
+        )}
+        {!ready && message && (
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ color: '#ff6666', marginBottom: '1.5rem' }}>{message}</p>
+            <a href="/login" style={{ display: 'block', padding: '0.85rem', background: '#cc0000', color: '#fff', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold', textAlign: 'center' }}>Back to Login</a>
+          </div>
+        )}
+        {ready && done ? (
           <div style={{ textAlign: 'center' }}>
             <p style={{ color: '#66cc66', fontSize: '1rem', marginBottom: '1.5rem' }}>✅ Password updated successfully!</p>
             <a href="/dashboard" style={{ display: 'block', padding: '0.85rem', background: '#cc0000', color: '#fff', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '1rem' }}>
               Go to Dashboard
             </a>
           </div>
-        ) : (
+        ) : ready ? (
           <>
             <div style={{ marginBottom: '1rem' }}>
               <label style={labelStyle}>New Password</label>
@@ -77,7 +101,7 @@ export default function ResetPassword() {
             </button>
             {message && <p style={{ marginTop: '1rem', color: '#ff6666', textAlign: 'center', fontSize: '0.9rem' }}>{message}</p>}
           </>
-        )}
+        ) : null}
       </div>
     </main>
   )

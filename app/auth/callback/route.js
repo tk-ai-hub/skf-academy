@@ -17,8 +17,9 @@ export async function GET(request) {
   }
 
   if (token_hash && type === 'recovery') {
-    await supabase.auth.verifyOtp({ token_hash, type: 'recovery' })
-    return NextResponse.redirect(new URL('/reset-password', requestUrl.origin))
+    // Don't verify server-side — session won't reach the browser.
+    // Pass token to client so reset-password page can verify it there.
+    return NextResponse.redirect(new URL(`/reset-password?token_hash=${token_hash}&type=recovery`, requestUrl.origin))
   }
 
   if (token_hash && type === 'email') {
