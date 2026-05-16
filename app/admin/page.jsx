@@ -93,6 +93,7 @@ export default function Admin() {
   const [bookModal, setBookModal] = useState(null) // { date, hour }
   const [bookModalSlot, setBookModalSlot] = useState(undefined)
   const [bookModalSearch, setBookModalSearch] = useState('')
+  const [bookModalSearchFocused, setBookModalSearchFocused] = useState(false)
   const [bookModalStudent, setBookModalStudent] = useState(null)
   const [bookModalIsGuest, setBookModalIsGuest] = useState(false)
   const [bookModalGuestFirst, setBookModalGuestFirst] = useState('')
@@ -307,6 +308,7 @@ export default function Admin() {
     setBookModal({ date, hour })
     setBookModalSlot({ slot_date: date, start_hour: hour }) // API will find-or-create
     setBookModalSearch('')
+    setBookModalSearchFocused(false)
     setBookModalStudent(null)
     setBookModalIsGuest(false)
     setBookModalGuestFirst('')
@@ -321,6 +323,7 @@ export default function Admin() {
     setBookModal(null)
     setBookModalSlot(undefined)
     setBookModalSearch('')
+    setBookModalSearchFocused(false)
     setBookModalStudent(null)
     setBookModalIsGuest(false)
     setBookModalGuestFirst('')
@@ -1341,15 +1344,16 @@ export default function Admin() {
                       placeholder="Search by name or phone..."
                       value={bookModalSearch}
                       onChange={e => { setBookModalSearch(e.target.value); setBookModalStudent(null) }}
+                      onFocus={() => setBookModalSearchFocused(true)}
+                      onBlur={() => setTimeout(() => setBookModalSearchFocused(false), 200)}
                       style={{ width: '100%', padding: '0.65rem 0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
                     />
-                    {!bookModalStudent && bookModalFiltered.length > 0 && bookModalSearch.trim() && (
+                    {!bookModalStudent && bookModalFiltered.length > 0 && bookModalSearch.trim() && bookModalSearchFocused && (
                       <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#111', border: '1px solid #333', borderRadius: '0 0 6px 6px', zIndex: 10, maxHeight: '220px', overflowY: 'auto' }}>
                         {bookModalFiltered.map(s => (
                           <div
                             key={s.id}
-                            onMouseDown={e => e.preventDefault()}
-                            onClick={() => { setBookModalStudent(s); setBookModalSearch(studentName(s)) }}
+                            onPointerDown={e => { e.preventDefault(); setBookModalStudent(s); setBookModalSearch(studentName(s)); setBookModalSearchFocused(false) }}
                             style={{ padding: '0.65rem 0.9rem', cursor: 'pointer', borderBottom: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between' }}
                             onMouseEnter={e => e.currentTarget.style.background = '#2a2a2a'}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
