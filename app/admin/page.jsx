@@ -69,6 +69,7 @@ export default function Admin() {
   const [bookings, setBookings] = useState([])
   const [students, setStudents] = useState([])
   const [message, setMessage] = useState('')
+  const [showWhatsNew, setShowWhatsNew] = useState(false)
   const [blockStart, setBlockStart] = useState('')
   const [blockEnd, setBlockEnd] = useState('')
   const [blockReason, setBlockReason] = useState('')
@@ -137,6 +138,7 @@ export default function Admin() {
 
   useEffect(() => {
     loadData(); loadTokenBalances()
+    if (!localStorage.getItem('skf_admin_whats_new_v2')) setShowWhatsNew(true)
     // Refresh student away status when tab becomes visible again
     const onVisible = () => { if (document.visibilityState === 'visible') loadData() }
     document.addEventListener('visibilitychange', onVisible)
@@ -563,6 +565,46 @@ export default function Admin() {
         <p style={{ background: '#1a3a1a', border: '1px solid #2a6a2a', padding: '0.75rem', borderRadius: '6px', color: '#66cc66' }}>
           {message}
         </p>
+      )}
+
+      {/* What's New Banner */}
+      {showWhatsNew && (
+        <div style={{ background: 'linear-gradient(135deg, #0d1a0d 0%, #0a0a14 100%)', border: '1px solid #1a5c1a', borderRadius: '10px', padding: '1.25rem 1.25rem 1.25rem 1.5rem', marginBottom: '1.5rem', position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
+                <span style={{ background: '#1a8c1a', color: '#fff', fontSize: '0.65rem', fontWeight: 'bold', padding: '0.2rem 0.55rem', borderRadius: '4px', letterSpacing: '1px', textTransform: 'uppercase' }}>What's New</span>
+                <span style={{ color: '#4a8c4a', fontSize: '0.78rem' }}>May 2025 Update</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '1.3rem', flexShrink: 0, marginTop: '1px' }}>🌴</span>
+                  <div>
+                    <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.9rem' }}>Away Mode</div>
+                    <div style={{ color: '#6a8c6a', fontSize: '0.8rem', marginTop: '0.1rem' }}>Students can now set Away Mode from their dashboard — lessons are auto-cancelled and tokens refunded. You can also toggle it per student in their profile. Look for the yellow "Away" badge in the student list.</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '1.3rem', flexShrink: 0, marginTop: '1px' }}>📚</span>
+                  <div>
+                    <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.9rem' }}>Library <span style={{ background: '#1a3a6a', color: '#6aaaff', fontSize: '0.65rem', fontWeight: 'bold', padding: '0.15rem 0.45rem', borderRadius: '4px', letterSpacing: '0.5px', textTransform: 'uppercase', marginLeft: '0.4rem', verticalAlign: 'middle' }}>Upload Content</span></div>
+                    <div style={{ color: '#6a8c6a', fontSize: '0.8rem', marginTop: '0.1rem' }}>Upload PDFs and video tutorials for your students. Use the Library button above to get started — add technique guides, forms, conditioning videos and more.</div>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => { localStorage.setItem('skf_admin_whats_new_v2', '1'); setShowWhatsNew(false) }}
+                style={{ marginTop: '1rem', padding: '0.5rem 1.25rem', background: '#1a5c1a', color: '#aaffaa', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+              >
+                Got it!
+              </button>
+            </div>
+            <button
+              onClick={() => { localStorage.setItem('skf_admin_whats_new_v2', '1'); setShowWhatsNew(false) }}
+              style={{ background: 'none', border: 'none', color: '#3a5c3a', fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1, flexShrink: 0, padding: '0' }}
+            >×</button>
+          </div>
+        </div>
       )}
 
       {/* Tab Nav */}
