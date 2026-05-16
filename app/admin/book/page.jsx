@@ -396,7 +396,7 @@ export default function AdminBook() {
                     style={inputStyle}
                     autoComplete="off"
                   />
-                  {!selectedStudent && searchResults.length > 0 && (
+                  {!selectedStudent && searchQuery.trim() && searchResults.length > 0 && (
                     <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1a1a', border: '1px solid #444', borderRadius: '0 0 6px 6px', zIndex: 10, maxHeight: '300px', overflowY: 'auto' }}>
                       {searchResults.map(s => (
                         <div
