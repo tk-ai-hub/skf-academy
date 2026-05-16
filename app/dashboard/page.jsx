@@ -23,6 +23,11 @@ export default function Dashboard() {
   const [notifSaved, setNotifSaved] = useState(false)
   const [pushEnabled, setPushEnabled] = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
+  const [awayModal, setAwayModal] = useState(false)
+  const [awayUntilInput, setAwayUntilInput] = useState('')
+  const [awayLoading, setAwayLoading] = useState(false)
+  const [awayMode, setAwayMode] = useState(false)
+  const [awayUntil, setAwayUntil] = useState(null)
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -34,10 +39,12 @@ export default function Dashboard() {
 
       const { data: profileData } = await supabase
         .from('users')
-        .select('first_name, last_name, phone, belt_rank, notify_2h, notify_12h, notify_24h, notify_48h')
+        .select('first_name, last_name, phone, belt_rank, notify_2h, notify_12h, notify_24h, notify_48h, away_mode, away_until')
         .eq('id', user.id)
         .single()
       setProfile(profileData)
+      setAwayMode(profileData?.away_mode || false)
+      setAwayUntil(profileData?.away_until || null)
 
       const { data: bookingData } = await supabase
         .from('bookings')
@@ -181,6 +188,39 @@ export default function Dashboard() {
     setTimeout(() => setNotifSaved(false), 2000)
   }
 
+  async function activateAway() {
+    setAwayLoading(true)
+    const res = await fetch('/api/set-away', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, awayUntil: awayUntilInput || null })
+    })
+    const data = await res.json()
+    setAwayLoading(false)
+    if (res.ok) {
+      setAwayMode(true)
+      setAwayUntil(awayUntilInput || null)
+      setAwayModal(false)
+      setAwayUntilInput('')
+      if (data.cancelled > 0) {
+        setBookings(prev => prev.filter(b => b.slots.slot_date < today))
+        setBalance(prev => prev + data.refunded)
+      }
+    }
+  }
+
+  async function clearAway() {
+    setAwayLoading(true)
+    await fetch('/api/set-away', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, clearAway: true })
+    })
+    setAwayLoading(false)
+    setAwayMode(false)
+    setAwayUntil(null)
+  }
+
   const tabStyle = (tab) => ({
     padding: '0.5rem 1.25rem',
     background: activeTab === tab ? '#cc0000' : 'transparent',
@@ -204,6 +244,60 @@ export default function Dashboard() {
               {profile.belt_rank} belt
             </p>
           )}
+        </div>
+      )}
+
+      {/* Away Mode Banner */}
+      {awayMode && (
+        <div style={{ background: '#1a1200', border: '1px solid #886600', borderRadius: '8px', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <div>
+            <div style={{ color: '#ffcc00', fontWeight: 'bold', fontSize: '0.95rem' }}>🌴 Away Mode Active</div>
+            <div style={{ color: '#aa9933', fontSize: '0.8rem', marginTop: '2px' }}>
+              {awayUntil
+                ? `Your lessons are paused until ${new Date(awayUntil + 'T00:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric' })}`
+                : 'Your lessons are paused and notifications are off'}
+            </div>
+          </div>
+          <button
+            onClick={clearAway}
+            disabled={awayLoading}
+            style={{ padding: '0.5rem 1rem', background: '#886600', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+          >
+            {awayLoading ? '...' : "I'm Back"}
+          </button>
+        </div>
+      )}
+
+      {/* Away Mode Modal */}
+      {awayModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: '#1a1a1a', border: '1px solid #886600', borderRadius: '12px', padding: '1.75rem', maxWidth: '360px', width: '100%' }}>
+            <h3 style={{ color: '#ffcc00', margin: '0 0 0.5rem', fontSize: '1.1rem' }}>🌴 Set Away Mode</h3>
+            <p style={{ color: '#999', fontSize: '0.85rem', margin: '0 0 1.25rem' }}>
+              Your upcoming bookings will be cancelled and tokens refunded. Notifications will be paused until you return.
+            </p>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', color: '#777', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>
+                Return date (optional)
+              </label>
+              <input
+                type="date"
+                value={awayUntilInput}
+                min={today}
+                onChange={e => setAwayUntilInput(e.target.value)}
+                style={{ width: '100%', padding: '0.65rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box', colorScheme: 'dark' }}
+              />
+              <div style={{ color: '#555', fontSize: '0.75rem', marginTop: '0.4rem' }}>Leave blank to pause indefinitely</div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={() => { setAwayModal(false); setAwayUntilInput('') }} style={{ flex: 1, padding: '0.7rem', background: 'transparent', border: '1px solid #333', borderRadius: '6px', color: '#888', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={activateAway} disabled={awayLoading} style={{ flex: 2, padding: '0.7rem', background: '#886600', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                {awayLoading ? 'Setting Away…' : 'Go Away'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -513,6 +607,34 @@ export default function Dashboard() {
           {notifSaved && (
             <p style={{ color: '#4caf50', fontSize: '0.85rem', marginTop: '0.5rem' }}>Saved</p>
           )}
+
+          {/* Away Mode */}
+          <div style={{ marginTop: '2rem', borderTop: '1px solid #222', paddingTop: '1.5rem' }}>
+            <div style={{ color: '#555', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.75rem' }}>Away Mode</div>
+            {awayMode ? (
+              <div style={{ background: '#1a1200', border: '1px solid #886600', borderRadius: '8px', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ color: '#ffcc00', fontWeight: 'bold', fontSize: '0.9rem' }}>Currently Away</div>
+                  <div style={{ color: '#aa9933', fontSize: '0.8rem', marginTop: '2px' }}>
+                    {awayUntil ? `Until ${new Date(awayUntil + 'T00:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric' })}` : 'Indefinitely'}
+                  </div>
+                </div>
+                <button onClick={clearAway} disabled={awayLoading} style={{ padding: '0.5rem 1rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                  {awayLoading ? '...' : "I'm Back"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>Going away?</div>
+                  <div style={{ color: '#555', fontSize: '0.8rem', marginTop: '2px' }}>Pause lessons & notifications while you're away</div>
+                </div>
+                <button onClick={() => setAwayModal(true)} style={{ padding: '0.5rem 1rem', background: '#2a2a2a', color: '#ffcc00', border: '1px solid #886600', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                  Set Away
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </main>

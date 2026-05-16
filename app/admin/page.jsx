@@ -130,6 +130,9 @@ export default function Admin() {
   const [profileDeleting, setProfileDeleting] = useState(false)
   const [profileDeleteError, setProfileDeleteError] = useState('')
   const [profileNotifySkillClass, setProfileNotifySkillClass] = useState(true)
+  const [profileAwayMode, setProfileAwayMode] = useState(false)
+  const [profileAwayUntil, setProfileAwayUntil] = useState(null)
+  const [profileAwayLoading, setProfileAwayLoading] = useState(false)
 
   useEffect(() => { loadData(); loadTokenBalances() }, [])
   useEffect(() => { loadBlockCalSlots() }, [blockWeekOffset])
@@ -147,7 +150,7 @@ export default function Admin() {
 
     const { data: studentData } = await supabase
       .from('users')
-      .select('id, full_name, first_name, last_name, email, belt_rank, date_of_birth, phone')
+      .select('id, full_name, first_name, last_name, email, belt_rank, date_of_birth, phone, away_mode')
       .eq('role', 'student')
     setStudents(studentData || [])
 
@@ -386,8 +389,10 @@ export default function Admin() {
     setProfileDeleteConfirm(false)
     setProfileDeleting(false)
     setProfileDeleteError('')
-    const { data: prefData } = await supabase.from('users').select('notify_skill_class').eq('id', s.id).single()
+    const { data: prefData } = await supabase.from('users').select('notify_skill_class, away_mode, away_until').eq('id', s.id).single()
     setProfileNotifySkillClass(prefData?.notify_skill_class !== false)
+    setProfileAwayMode(prefData?.away_mode || false)
+    setProfileAwayUntil(prefData?.away_until || null)
     const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', s.id)
     setProfileTokens((tokenData || []).reduce((sum, t) => sum + t.amount, 0))
     const today = new Date().toISOString().split('T')[0]
@@ -409,6 +414,9 @@ export default function Admin() {
     setProfileDeleting(false)
     setProfileDeleteError('')
     setProfileNotifySkillClass(true)
+    setProfileAwayMode(false)
+    setProfileAwayUntil(null)
+    setProfileAwayLoading(false)
   }
 
   async function deleteStudent() {
@@ -819,7 +827,10 @@ export default function Admin() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
                     {/* Name + info */}
                     <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => openProfileModal(s)}>
-                      <p style={{ margin: 0, fontWeight: 'bold', color: '#fff' }}>{studentName(s)}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <p style={{ margin: 0, fontWeight: 'bold', color: '#fff' }}>{studentName(s)}</p>
+                        {s.away_mode && <span style={{ background: '#886600', color: '#ffcc00', fontSize: '0.65rem', fontWeight: 'bold', padding: '0.15rem 0.45rem', borderRadius: '4px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Away</span>}
+                      </div>
                       <p style={{ margin: '0.2rem 0 0', color: '#666', fontSize: '0.82rem' }}>
                         {s.belt_rank ? `${s.belt_rank} belt` : 'No belt set'}
                         {s.phone && <span style={{ marginLeft: '0.6rem', color: '#555' }}>{s.phone}</span>}
@@ -1109,6 +1120,42 @@ export default function Admin() {
               >
                 <span style={{
                   position: 'absolute', top: '3px', left: profileNotifySkillClass ? '22px' : '3px',
+                  width: '18px', height: '18px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s'
+                }} />
+              </button>
+            </div>
+
+            {/* Away Mode toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: profileAwayMode ? '#1a1200' : '#111', border: `1px solid ${profileAwayMode ? '#886600' : '#2a2a2a'}`, borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+              <div>
+                <div style={{ color: profileAwayMode ? '#ffcc00' : '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                  {profileAwayMode ? '🌴 Away Mode Active' : 'Away Mode'}
+                </div>
+                <div style={{ color: '#555', fontSize: '0.78rem', marginTop: '0.15rem' }}>
+                  {profileAwayMode
+                    ? (profileAwayUntil ? `Until ${new Date(profileAwayUntil + 'T00:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric' })}` : 'Indefinitely')
+                    : 'Pause lessons & notifications'}
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  setProfileAwayLoading(true)
+                  await fetch('/api/set-away', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: profileModal.id, clearAway: profileAwayMode })
+                  })
+                  setProfileAwayMode(!profileAwayMode)
+                  if (profileAwayMode) setProfileAwayUntil(null)
+                  setProfileAwayLoading(false)
+                }}
+                disabled={profileAwayLoading}
+                style={{
+                  width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: profileAwayLoading ? 'default' : 'pointer', padding: 0, flexShrink: 0,
+                  background: profileAwayMode ? '#886600' : '#333', position: 'relative', transition: 'background 0.2s'
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: '3px', left: profileAwayMode ? '22px' : '3px',
                   width: '18px', height: '18px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s'
                 }} />
               </button>

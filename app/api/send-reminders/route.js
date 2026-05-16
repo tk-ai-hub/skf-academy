@@ -56,7 +56,7 @@ export async function GET(request) {
     .select(`
       id, student_id,
       slots!bookings_slot_id_fkey (slot_date, start_hour),
-      users!bookings_student_id_fkey (email, first_name, notify_2h, notify_12h, notify_24h, notify_48h)
+      users!bookings_student_id_fkey (email, first_name, notify_2h, notify_12h, notify_24h, notify_48h, away_mode)
     `)
     .eq('status', 'confirmed')
 
@@ -81,6 +81,9 @@ export async function GET(request) {
       const user = booking.users
       if (!slot || !user) continue
       if (!user.email || user.email.includes('@skf-academy.internal')) continue
+
+      // Skip students in away mode
+      if (user.away_mode) continue
 
       // Respect per-user notification preferences (default: on if null/undefined)
       const prefKey = `notify_${interval.label}` // notify_48h, notify_24h, notify_12h, notify_2h
@@ -162,11 +165,12 @@ export async function GET(request) {
   if (nowVan.getDay() === 2 || nowVan.getDay() === 4) { // Tuesday or Thursday
     const { data: skillStudents } = await supabase
       .from('users')
-      .select('id, email, first_name, notify_skill_class')
+      .select('id, email, first_name, notify_skill_class, away_mode')
       .eq('role', 'student')
 
     for (const student of (skillStudents || [])) {
       if (!student.email || student.email.includes('@skf-academy.internal')) continue
+      if (student.away_mode) continue
       if (student.notify_skill_class === false) continue
 
       const dayName = nowVan.getDay() === 2 ? 'Tuesday' : 'Thursday'
@@ -206,7 +210,7 @@ export async function GET(request) {
     // Get all active students with real emails
     const { data: allStudents } = await supabase
       .from('users')
-      .select('id, email, first_name')
+      .select('id, email, first_name, away_mode')
       .eq('role', 'student')
 
     // Get all confirmed bookings in next 7 days
@@ -221,6 +225,7 @@ export async function GET(request) {
 
     for (const student of (allStudents || [])) {
       if (!student.email || student.email.includes('@skf-academy.internal')) continue
+      if (student.away_mode) continue
       if (studentsWithBooking.has(student.id)) continue
 
       // Send email
