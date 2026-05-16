@@ -157,11 +157,20 @@ export default function Admin() {
       .order('booked_at', { ascending: false })
     setBookings((bookingData || []).filter(b => b.slots))
 
-    const { data: studentData } = await supabase
+    const { data: studentData, error: studentErr } = await supabase
       .from('users')
       .select('id, full_name, first_name, last_name, email, belt_rank, date_of_birth, phone, away_mode')
       .eq('role', 'student')
-    setStudents(studentData || [])
+    if (studentErr) {
+      // Fallback without away_mode in case column doesn't exist yet
+      const { data: fallback } = await supabase
+        .from('users')
+        .select('id, full_name, first_name, last_name, email, belt_rank, date_of_birth, phone')
+        .eq('role', 'student')
+      setStudents(fallback || [])
+    } else {
+      setStudents(studentData || [])
+    }
 
     const { data: rangeData } = await supabase
       .from('blocked_ranges')
