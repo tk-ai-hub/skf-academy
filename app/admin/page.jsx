@@ -1031,21 +1031,23 @@ export default function Admin() {
             <div style={{ background: '#111', border: '1px solid #cc0000', borderRadius: '8px', padding: '1rem 1.25rem', marginBottom: '1.25rem' }}>
               <div style={{ color: '#cc0000', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.25rem' }}>Lesson Tokens</div>
               <div style={{ color: '#fff', fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>{profileTokens}</div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
                 <input
                   type="number" min="1" placeholder="Amount"
                   value={profileTokenAdjust}
                   onChange={e => setProfileTokenAdjust(e.target.value)}
-                  style={{ width: '80px', padding: '0.4rem 0.5rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.9rem' }}
+                  style={{ width: '90px', padding: '0.6rem 0.5rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '1rem' }}
                 />
                 <input
                   type="text" placeholder="Note (optional)"
                   value={profileTokenNote}
                   onChange={e => setProfileTokenNote(e.target.value)}
-                  style={{ flex: 1, minWidth: '120px', padding: '0.4rem 0.5rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.9rem' }}
+                  style={{ flex: 1, padding: '0.6rem 0.5rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '1rem' }}
                 />
-                <button onClick={() => applyTokenAdjust(1)} style={{ padding: '0.4rem 0.75rem', background: '#1a4a1a', color: '#66cc66', border: '1px solid #2a6a2a', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>+ Add</button>
-                <button onClick={() => applyTokenAdjust(-1)} style={{ padding: '0.4rem 0.75rem', background: '#2a1a1a', color: '#cc6666', border: '1px solid #6a2a2a', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>− Remove</button>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={() => applyTokenAdjust(1)} style={{ flex: 1, padding: '0.65rem', background: '#1a4a1a', color: '#66cc66', border: '1px solid #2a6a2a', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>+ Add</button>
+                <button onClick={() => applyTokenAdjust(-1)} style={{ flex: 1, padding: '0.65rem', background: '#2a1a1a', color: '#cc6666', border: '1px solid #6a2a2a', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>− Remove</button>
               </div>
             </div>
 
