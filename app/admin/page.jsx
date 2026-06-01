@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../supabase'
 
 function formatHour(h) {
@@ -136,8 +136,16 @@ export default function Admin() {
   const [profileAwayDateInput, setProfileAwayDateInput] = useState('')
   const [profileAwayLoading, setProfileAwayLoading] = useState(false)
 
+  // Poll state
+  const [poll, setPoll] = useState(null)
+  const [pollVotes, setPollVotes] = useState({})
+  const [pollTotal, setPollTotal] = useState(0)
+  const [pollCreating, setPollCreating] = useState(false)
+  const [pollLoading, setPollLoading] = useState(false)
+
   useEffect(() => {
     loadData(); loadTokenBalances()
+    loadPoll().catch(() => {})
     if (!localStorage.getItem('skf_admin_whats_new_v2')) setShowWhatsNew(true)
     // Refresh student away status when tab becomes visible again
     const onVisible = () => { if (document.visibilityState === 'visible') loadData() }
@@ -209,6 +217,55 @@ export default function Admin() {
       .order('slot_date', { ascending: true })
       .order('start_hour', { ascending: true })
     setBlockCalSlots(data || [])
+  }
+
+  const [pollVoters, setPollVoters] = useState([])
+
+  async function loadPoll() {
+    try {
+      setPollLoading(true)
+      const res = await fetch('/api/polls?admin=true')
+      const d = await res.json()
+      setPollLoading(false)
+      if (d.poll) {
+        setPoll(d.poll)
+        setPollVotes(d.votes || {})
+        setPollTotal(d.total || 0)
+        setPollVoters(d.voters || [])
+      } else {
+        setPoll(null)
+        setPollVotes({})
+        setPollTotal(0)
+        setPollVoters([])
+      }
+    } catch {
+      setPollLoading(false)
+    }
+  }
+
+  async function createBBQPoll() {
+    if (pollCreating) return
+    setPollCreating(true)
+    await fetch('/api/polls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: 'Would you like to join us for a Social BBQ? 🍖',
+        options: [
+          { id: 'jul4', label: '🎆 Yes — July 4th (11am–4pm)' },
+          { id: 'jul5', label: '🔥 Yes — July 5th (11am–4pm)' },
+          { id: 'no', label: "❌ Can't make it" },
+        ]
+      })
+    })
+    setPollCreating(false)
+    loadPoll()
+  }
+
+  async function closePoll() {
+    if (!poll) return
+    await fetch(`/api/polls?id=${poll.id}`, { method: 'DELETE' })
+    setPoll(null); setPollVotes({}); setPollTotal(0)
   }
 
   async function cancelBooking(booking) {
@@ -407,6 +464,9 @@ export default function Admin() {
       setBookModalError('Network error: ' + err.message)
     }
   }
+
+  const dropdownPointerStartY = useRef(0)
+  const dropdownDidDrag = useRef(false)
 
   const bookModalFiltered = bookModalSearch.trim()
     ? students.filter(s => {
@@ -647,6 +707,7 @@ export default function Admin() {
           <button style={tabStyle('bookings')} onClick={() => setActiveTab('bookings')}>📋 All Bookings</button>
           <button style={tabStyle('students')} onClick={() => setActiveTab('students')}>👥 Students</button>
           <button style={tabStyle('block')} onClick={() => setActiveTab('block')}>🔒 Block Dates</button>
+          <button style={tabStyle('poll')} onClick={() => setActiveTab('poll')}>📊 Poll</button>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button
@@ -1511,16 +1572,22 @@ export default function Admin() {
                       value={bookModalSearch}
                       onChange={e => { setBookModalSearch(e.target.value); setBookModalStudent(null) }}
                       onFocus={() => setBookModalSearchFocused(true)}
-                      onBlur={() => setTimeout(() => setBookModalSearchFocused(false), 200)}
+                      onBlur={() => setTimeout(() => setBookModalSearchFocused(false), 400)}
                       style={{ width: '100%', padding: '0.65rem 0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
                     />
                     {!bookModalStudent && bookModalFiltered.length > 0 && bookModalSearch.trim() && bookModalSearchFocused && (
-                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#111', border: '1px solid #333', borderRadius: '0 0 6px 6px', zIndex: 10, maxHeight: '220px', overflowY: 'auto' }}>
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1a1a', border: '1px solid #555', borderRadius: '0 0 8px 8px', zIndex: 9999, maxHeight: '200px', overflowY: 'scroll', boxShadow: '0 8px 24px rgba(0,0,0,0.9)' }}>
                         {bookModalFiltered.map(s => (
                           <div
                             key={s.id}
-                            onPointerDown={e => { e.preventDefault(); setBookModalStudent(s); setBookModalSearch(studentName(s)); setBookModalSearchFocused(false) }}
-                            style={{ padding: '0.65rem 0.9rem', cursor: 'pointer', borderBottom: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between' }}
+                            onPointerDown={e => { dropdownPointerStartY.current = e.clientY; dropdownDidDrag.current = false }}
+                            onPointerMove={e => { if (Math.abs(e.clientY - dropdownPointerStartY.current) > 6) dropdownDidDrag.current = true }}
+                            onPointerUp={() => {
+                              if (!dropdownDidDrag.current) {
+                                setBookModalStudent(s); setBookModalSearch(studentName(s)); setBookModalSearchFocused(false)
+                              }
+                            }}
+                            style={{ padding: '0.65rem 0.9rem', cursor: 'pointer', borderBottom: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between', userSelect: 'none' }}
                             onMouseEnter={e => e.currentTarget.style.background = '#2a2a2a'}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                           >
@@ -1595,6 +1662,107 @@ export default function Admin() {
           </div>
         </div>
       )}
+      {/* ── POLL TAB ── */}
+      {activeTab === 'poll' && (
+        <div style={{ maxWidth: '600px' }}>
+          <h2 style={{ color: '#fff', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1.5rem' }}>📊 Student Poll</h2>
+
+          {pollLoading ? (
+            <p style={{ color: '#555' }}>Loading…</p>
+          ) : poll ? (
+            <div>
+              {/* Active poll */}
+              <div style={{ background: '#1a1a1a', border: '1px solid #cc0000', borderRadius: '10px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div>
+                    <div style={{ color: '#cc0000', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.35rem' }}>Active Poll</div>
+                    <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.05rem' }}>{poll.question}</div>
+                  </div>
+                  <button
+                    onClick={closePoll}
+                    style={{ padding: '0.4rem 0.85rem', background: 'transparent', color: '#884444', border: '1px solid #442222', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', whiteSpace: 'nowrap', flexShrink: 0 }}
+                  >
+                    Close Poll
+                  </button>
+                </div>
+
+                {/* Results */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {(poll.options || []).map(opt => {
+                    const count = pollVotes[opt.id] || 0
+                    const pct = pollTotal > 0 ? Math.round((count / pollTotal) * 100) : 0
+                    return (
+                      <div key={opt.id}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                          <span style={{ color: '#ddd', fontSize: '0.9rem' }}>{opt.label}</span>
+                          <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.9rem' }}>{count} <span style={{ color: '#666', fontWeight: 'normal' }}>({pct}%)</span></span>
+                        </div>
+                        <div style={{ background: '#2a2a2a', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
+                          <div style={{ background: '#cc0000', width: `${pct}%`, height: '100%', borderRadius: '4px', transition: 'width 0.4s' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div style={{ color: '#555', fontSize: '0.8rem', marginTop: '1.25rem' }}>
+                  {pollTotal} response{pollTotal !== 1 ? 's' : ''} total
+                </div>
+              </div>
+
+              {/* Voter breakdown */}
+              {pollVoters.length > 0 && (
+                <div style={{ marginTop: '1.5rem' }}>
+                  <div style={{ color: '#555', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.75rem' }}>Who Voted</div>
+                  {(poll.options || []).map(opt => {
+                    const optVoters = pollVoters.filter(v => v.optionId === opt.id)
+                    if (optVoters.length === 0) return null
+                    return (
+                      <div key={opt.id} style={{ marginBottom: '1rem' }}>
+                        <div style={{ color: '#cc0000', fontSize: '0.78rem', fontWeight: 'bold', marginBottom: '0.4rem' }}>{opt.label}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          {optVoters.map(v => (
+                            <div key={v.studentId} style={{ background: '#1a1a1a', borderRadius: '6px', padding: '0.45rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ color: '#fff', fontSize: '0.85rem' }}>{v.name}</span>
+                              <span style={{ color: '#444', fontSize: '0.75rem' }}>{new Date(v.votedAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              <button onClick={loadPoll} style={{ padding: '0.5rem 1.25rem', background: '#2a2a2a', color: '#aaa', border: '1px solid #333', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', marginTop: '0.75rem' }}>
+                Refresh Results
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '10px', padding: '1.5rem', marginBottom: '1rem' }}>
+                <p style={{ color: '#999', margin: '0 0 1.25rem', fontSize: '0.9rem' }}>No active poll. Launch the BBQ poll to let students vote on their preferred date.</p>
+                <div style={{ background: '#111', border: '1px solid #2a2a2a', borderRadius: '8px', padding: '1rem', marginBottom: '1.25rem' }}>
+                  <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem', marginBottom: '0.5rem' }}>Would you like to join us for a Social BBQ? 🍖</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {['🎆 Yes — July 4th (11am–4pm)', '🔥 Yes — July 5th (11am–4pm)', "❌ Can't make it"].map(o => (
+                      <div key={o} style={{ color: '#666', fontSize: '0.85rem' }}>· {o}</div>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={createBBQPoll}
+                  disabled={pollCreating}
+                  style={{ padding: '0.75rem 1.75rem', background: pollCreating ? '#333' : '#cc0000', color: pollCreating ? '#666' : '#fff', border: 'none', borderRadius: '6px', cursor: pollCreating ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.95rem' }}
+                >
+                  {pollCreating ? 'Launching…' : '🚀 Launch BBQ Poll'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
     </main>
   )
 }
