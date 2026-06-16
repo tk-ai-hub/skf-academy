@@ -1,9 +1,7 @@
 'use client'
-
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
-// view: 'home' | 'signin' | 'signup' | 'trial' | 'forgot'
 export default function Login() {
   const [view, setView] = useState('home')
   const [email, setEmail] = useState('')
@@ -24,16 +22,12 @@ export default function Login() {
     const ios = /iphone|ipad|ipod/.test(ua)
     const mac = /macintosh/.test(ua) && /safari/.test(ua) && !/chrome/.test(ua)
     const standalone = window.matchMedia('(display-mode: standalone)').matches
-    setIsIOS(ios)
-    setIsMac(mac)
+    setIsIOS(ios); setIsMac(mac)
     if (!standalone) {
-      if (ios || mac) {
-        setShowInstallBanner(true)
-      } else {
+      if (ios || mac) { setShowInstallBanner(true) }
+      else {
         window.addEventListener('beforeinstallprompt', (e) => {
-          e.preventDefault()
-          setInstallPrompt(e)
-          setShowInstallBanner(true)
+          e.preventDefault(); setInstallPrompt(e); setShowInstallBanner(true)
         })
       }
     }
@@ -48,8 +42,7 @@ export default function Login() {
 
   function reset(nextView) {
     setEmail(''); setPassword(''); setFirstName(''); setLastName('')
-    setPhone(''); setDob(''); setMessage('')
-    setView(nextView)
+    setPhone(''); setDob(''); setMessage(''); setView(nextView)
   }
 
   async function handleSignIn() {
@@ -57,16 +50,17 @@ export default function Login() {
     setLoading(true); setMessage('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
-    if (error) setMessage(error.message)
-    else { const { data: profile } = await supabase.from('users').select('role').eq('id',(await supabase.auth.getUser()).data.user.id).single(); window.location.href = profile?.data?.role === 'admin' || profile?.role === 'admin' ? '/admin' : '/dashboard' }
+    if (error) { setMessage(error.message); return }
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('users').select('role').eq('id', user.id).single()
+    window.location.href = profile?.role === 'admin' ? '/admin' : '/dashboard'
   }
 
   async function handleSignUp() {
     if (!firstName || !email || !password) { setMessage('First name, email and password are required.'); return }
     setLoading(true); setMessage('')
     const res = await fetch('/api/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, firstName, lastName, phone, dob: dob || null })
     })
     const data = await res.json()
@@ -79,8 +73,7 @@ export default function Login() {
     if (!firstName || !email || !password) { setMessage('First name, email and password are required.'); return }
     setLoading(true); setMessage('')
     const res = await fetch('/api/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, firstName, lastName, phone, dob: dob || null, trialToken: true })
     })
     const data = await res.json()
@@ -100,203 +93,209 @@ export default function Login() {
     setMessage('✅ Check your email for a password reset link.')
   }
 
-  const inputStyle = {
-    width: '100%', padding: '0.75rem', background: '#1a1a1a',
-    border: '1px solid #444', borderRadius: '4px', color: '#fff',
-    fontSize: '1rem', boxSizing: 'border-box'
+  const inp = {
+    width: '100%', padding: '10px 16px', background: '#1a1a1a',
+    border: '1px solid #2a2a2a', borderRadius: '8px', color: '#fff',
+    fontSize: '15px', boxSizing: 'border-box', outline: 'none',
+    transition: 'border-color 0.2s',
   }
-  const labelStyle = {
-    display: 'block', color: '#999', fontSize: '0.8rem',
-    letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem'
+  const lbl = {
+    display: 'block', color: '#555', fontSize: '11px',
+    letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '6px',
   }
-  const fieldStyle = { marginBottom: '1rem' }
+  const field = { marginBottom: '16px' }
 
   return (
-    <main style={{ maxWidth: '420px', margin: '3rem auto', padding: '0 1rem' }}>
+    <div style={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '26px 16px' }}>
 
-      {/* PWA install banner */}
+      {/* PWA Install Banner */}
       {showInstallBanner && (
-        <div style={{ background: '#2a2a2a', border: '1px solid #cc0000', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ width: '100%', maxWidth: '420px', background: '#111', border: '1px solid #cc0000', borderRadius: '10px', padding: '16px', marginBottom: '26px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <p style={{ margin: 0, color: '#fff', fontWeight: 'bold', fontSize: '0.9rem' }}>Install SKF Academy</p>
-            <button onClick={() => setShowInstallBanner(false)} style={{ background: 'transparent', color: '#666', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: 0 }}>×</button>
+            <p style={{ margin: 0, color: '#fff', fontWeight: 'bold', fontSize: '13px' }}>Install SKF Academy</p>
+            <button onClick={() => setShowInstallBanner(false)} style={{ background: 'transparent', color: '#444', border: 'none', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: 0 }}>×</button>
           </div>
           {isIOS ? (
-            <div style={{ marginTop: '0.75rem' }}>
-              <p style={{ margin: '0 0 0.5rem', color: '#999', fontSize: '0.85rem' }}>Add this app to your home screen:</p>
-              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>1. Tap the <strong style={{ color: '#fff' }}>Share</strong> button at the bottom of Safari</p>
-              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>2. Tap <strong style={{ color: '#fff' }}>"Add to Home Screen"</strong></p>
+            <div style={{ marginTop: '10px' }}>
+              <p style={{ margin: '0 0 6px', color: '#777', fontSize: '13px' }}>Add this app to your home screen:</p>
+              <p style={{ margin: '4px 0', color: '#aaa', fontSize: '13px' }}>1. Tap <strong style={{ color: '#fff' }}>Share</strong> in Safari</p>
+              <p style={{ margin: '4px 0', color: '#aaa', fontSize: '13px' }}>2. Tap <strong style={{ color: '#fff' }}>"Add to Home Screen"</strong></p>
             </div>
           ) : isMac ? (
-            <div style={{ marginTop: '0.75rem' }}>
-              <p style={{ margin: '0 0 0.5rem', color: '#999', fontSize: '0.85rem' }}>Add this app to your Mac dock:</p>
-              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>1. Click <strong style={{ color: '#fff' }}>Share</strong> in the Safari toolbar</p>
-              <p style={{ margin: '0.25rem 0', color: '#ccc', fontSize: '0.85rem' }}>2. Click <strong style={{ color: '#fff' }}>"Add to Dock"</strong></p>
+            <div style={{ marginTop: '10px' }}>
+              <p style={{ margin: '0 0 6px', color: '#777', fontSize: '13px' }}>Add this app to your Mac dock:</p>
+              <p style={{ margin: '4px 0', color: '#aaa', fontSize: '13px' }}>1. Click <strong style={{ color: '#fff' }}>Share</strong> in Safari toolbar</p>
+              <p style={{ margin: '4px 0', color: '#aaa', fontSize: '13px' }}>2. Click <strong style={{ color: '#fff' }}>"Add to Dock"</strong></p>
             </div>
           ) : (
-            <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ margin: 0, color: '#999', fontSize: '0.85rem' }}>Add to your home screen for quick access</p>
-              <button onClick={handleInstall} style={{ padding: '0.4rem 0.9rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', marginLeft: '1rem' }}>Install</button>
+            <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ margin: 0, color: '#777', fontSize: '13px' }}>Add to your home screen for quick access</p>
+              <button onClick={handleInstall} style={{ padding: '6px 16px', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginLeft: '16px' }}>Install</button>
             </div>
           )}
         </div>
       )}
 
-      {/* Branding */}
-      <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ color: '#cc0000', letterSpacing: '3px', textTransform: 'uppercase', fontSize: '1.8rem', margin: '0 0 0.25rem' }}>SKF Academy</h1>
-        <p style={{ color: '#555', fontSize: '0.8rem', letterSpacing: '2px', textTransform: 'uppercase', margin: 0 }}>Shaolin Kung Fu — Est. 1986</p>
+      {/* Logo & Branding */}
+      <div style={{ textAlign: 'center', marginBottom: '42px' }}>
+        <img
+          src="/logo.png"
+          alt="SKF Academy"
+          style={{ height: '90px', width: '90px', borderRadius: '50%', border: '2px solid #cc0000', display: 'block', margin: '0 auto 16px', boxShadow: '0 0 40px rgba(204,0,0,0.25)' }}
+        />
+        <div style={{ color: '#fff', fontSize: '24px', fontWeight: 'bold', letterSpacing: '4px', textTransform: 'uppercase' }}>SKF Academy</div>
+        <div style={{ color: '#444', fontSize: '11px', letterSpacing: '3px', textTransform: 'uppercase', marginTop: '6px' }}>Shaolin Kung Fu — Est. 1986</div>
       </div>
 
-      {/* ── HOME ── */}
-      {view === 'home' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {/* Free Trial */}
-          <button
-            onClick={() => reset('trial')}
-            style={{ width: '100%', padding: '1.2rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '1.15rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', boxShadow: '0 4px 20px rgba(204,0,0,0.4)' }}
-          >
-            Free Trial Lesson / Meeting
-          </button>
-          <p style={{ color: '#888', textAlign: 'center', fontSize: '0.85rem', margin: '-0.25rem 0 0.25rem' }}>
-            No commitment — get 1 free token to book your first lesson
-          </p>
+      <div style={{ width: '100%', maxWidth: '420px' }}>
 
-          {/* Sign Up */}
-          <button
-            onClick={() => reset('signup')}
-            style={{ width: '100%', padding: '1rem', background: 'transparent', color: '#fff', border: '2px solid #fff', borderRadius: '10px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}
-          >
-            Create Account
-          </button>
+        {/* ── HOME ── */}
+        {view === 'home' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button
+              onClick={() => reset('trial')}
+              style={{ width: '100%', padding: '16px', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '15px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase', boxShadow: '0 4px 24px rgba(204,0,0,0.35)' }}
+            >
+              Free Trial Lesson / Meeting
+            </button>
+            <p style={{ color: '#555', textAlign: 'center', fontSize: '13px', margin: '0 0 6px' }}>
+              No commitment — get 1 free token to book your first lesson
+            </p>
 
-          {/* Sign In */}
-          <p
-            onClick={() => reset('signin')}
-            style={{ textAlign: 'center', color: '#666', cursor: 'pointer', fontSize: '0.9rem', margin: '0.5rem 0 0' }}
-          >
-            Already have an account? <span style={{ color: '#cc0000' }}>Sign in</span>
-          </p>
-        </div>
-      )}
+            <button
+              onClick={() => reset('signup')}
+              style={{ width: '100%', padding: '14px', background: 'transparent', color: '#fff', border: '2px solid #333', borderRadius: '10px', cursor: 'pointer', fontSize: '15px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}
+            >
+              Create Account
+            </button>
 
-      {/* ── SIGN IN ── */}
-      {view === 'signin' && (
-        <div style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '2rem' }}>
-          <h2 style={{ color: '#fff', textAlign: 'center', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '1.5rem', fontSize: '1.1rem' }}>Sign In</h2>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} autoFocus />
+            <p
+              onClick={() => reset('signin')}
+              style={{ textAlign: 'center', color: '#555', cursor: 'pointer', fontSize: '13px', margin: '6px 0 0' }}
+            >
+              Already have an account? <span style={{ color: '#cc0000' }}>Sign in</span>
+            </p>
           </div>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label style={labelStyle}>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSignIn()} style={inputStyle} />
-          </div>
-          <button onClick={handleSignIn} disabled={loading} style={{ width: '100%', padding: '0.85rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-          {message && <p style={{ marginTop: '1rem', color: '#ff6666', textAlign: 'center', fontSize: '0.9rem' }}>{message}</p>}
-          <p onClick={() => reset('forgot')} style={{ marginTop: '1rem', textAlign: 'center', color: '#666', cursor: 'pointer', fontSize: '0.85rem' }}>Forgot password?</p>
-          <p onClick={() => reset('home')} style={{ marginTop: '0.5rem', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '0.85rem' }}>← Back</p>
-        </div>
-      )}
+        )}
 
-      {/* ── SIGN UP ── */}
-      {view === 'signup' && (
-        <div style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '2rem' }}>
-          <h2 style={{ color: '#fff', textAlign: 'center', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '1.5rem', fontSize: '1.1rem' }}>Create Account</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            <div>
-              <label style={labelStyle}>First Name</label>
-              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} style={inputStyle} autoFocus />
+        {/* ── SIGN IN ── */}
+        {view === 'signin' && (
+          <div style={{ background: '#111', border: '1px solid #222', borderRadius: '10px', padding: '26px' }}>
+            <h2 style={{ color: '#fff', textAlign: 'center', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '26px', fontSize: '15px', margin: '0 0 26px' }}>Sign In</h2>
+            <div style={field}>
+              <label style={lbl}>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inp} autoFocus />
             </div>
-            <div>
-              <label style={labelStyle}>Last Name</label>
-              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} style={inputStyle} />
+            <div style={{ marginBottom: '26px' }}>
+              <label style={lbl}>Password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSignIn()} style={inp} />
             </div>
+            <button onClick={handleSignIn} disabled={loading} style={{ width: '100%', padding: '13px', background: loading ? '#333' : '#cc0000', color: loading ? '#666' : '#fff', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
+              {loading ? 'Signing in…' : 'Sign In'}
+            </button>
+            {message && <p style={{ marginTop: '16px', color: '#ff6666', textAlign: 'center', fontSize: '13px' }}>{message}</p>}
+            <p onClick={() => reset('forgot')} style={{ marginTop: '16px', textAlign: 'center', color: '#555', cursor: 'pointer', fontSize: '13px' }}>Forgot password?</p>
+            <p onClick={() => reset('home')} style={{ marginTop: '6px', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '13px' }}>← Back</p>
           </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Phone Number</label>
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={inputStyle} />
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Date of Birth</label>
-            <input type="date" value={dob} onChange={e => setDob(e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} />
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
-          </div>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label style={labelStyle}>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} />
-          </div>
-          <button onClick={handleSignUp} disabled={loading} style={{ width: '100%', padding: '0.85rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            {loading ? 'Creating account...' : 'Create Account'}
-          </button>
-          {message && <p style={{ marginTop: '1rem', color: '#ff6666', textAlign: 'center', fontSize: '0.9rem' }}>{message}</p>}
-          <p onClick={() => reset('home')} style={{ marginTop: '1rem', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '0.85rem' }}>← Back</p>
-        </div>
-      )}
+        )}
 
-      {/* ── FREE TRIAL ── */}
-      {view === 'trial' && (
-        <div style={{ background: '#2a2a2a', border: '2px solid #cc0000', borderRadius: '8px', padding: '2rem' }}>
-          <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-            <h2 style={{ color: '#cc0000', letterSpacing: '2px', textTransform: 'uppercase', margin: '0 0 0.4rem', fontSize: '1.1rem' }}>Free Trial Lesson</h2>
-            <p style={{ color: '#888', fontSize: '0.85rem', margin: 0 }}>Fill in your details to claim your free lesson token</p>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            <div>
-              <label style={labelStyle}>First Name *</label>
-              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} style={inputStyle} autoFocus />
+        {/* ── SIGN UP ── */}
+        {view === 'signup' && (
+          <div style={{ background: '#111', border: '1px solid #222', borderRadius: '10px', padding: '26px' }}>
+            <h2 style={{ color: '#fff', textAlign: 'center', letterSpacing: '2px', textTransform: 'uppercase', margin: '0 0 26px', fontSize: '15px' }}>Create Account</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+              <div>
+                <label style={lbl}>First Name</label>
+                <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} style={inp} autoFocus />
+              </div>
+              <div>
+                <label style={lbl}>Last Name</label>
+                <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} style={inp} />
+              </div>
             </div>
-            <div>
-              <label style={labelStyle}>Last Name</label>
-              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} style={inputStyle} />
+            <div style={field}>
+              <label style={lbl}>Phone Number</label>
+              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={inp} />
             </div>
+            <div style={field}>
+              <label style={lbl}>Date of Birth</label>
+              <input type="date" value={dob} onChange={e => setDob(e.target.value)} style={{ ...inp, colorScheme: 'dark' }} />
+            </div>
+            <div style={field}>
+              <label style={lbl}>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inp} />
+            </div>
+            <div style={{ marginBottom: '26px' }}>
+              <label style={lbl}>Password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inp} />
+            </div>
+            <button onClick={handleSignUp} disabled={loading} style={{ width: '100%', padding: '13px', background: loading ? '#333' : '#cc0000', color: loading ? '#666' : '#fff', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
+              {loading ? 'Creating account…' : 'Create Account'}
+            </button>
+            {message && <p style={{ marginTop: '16px', color: '#ff6666', textAlign: 'center', fontSize: '13px' }}>{message}</p>}
+            <p onClick={() => reset('home')} style={{ marginTop: '16px', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '13px' }}>← Back</p>
           </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Phone Number</label>
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={inputStyle} />
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Date of Birth</label>
-            <input type="date" value={dob} onChange={e => setDob(e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} />
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Email *</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
-          </div>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label style={labelStyle}>Password *</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} />
-          </div>
-          <button onClick={handleTrial} disabled={loading} style={{ width: '100%', padding: '1rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1.05rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            {loading ? 'Setting up your account...' : 'Claim Free Trial'}
-          </button>
-          {message && <p style={{ marginTop: '1rem', color: '#ff6666', textAlign: 'center', fontSize: '0.9rem' }}>{message}</p>}
-          <p onClick={() => reset('home')} style={{ marginTop: '1rem', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '0.85rem' }}>← Back</p>
-        </div>
-      )}
+        )}
 
-      {/* ── FORGOT PASSWORD ── */}
-      {view === 'forgot' && (
-        <div style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: '8px', padding: '2rem' }}>
-          <h2 style={{ color: '#fff', textAlign: 'center', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '0.5rem', fontSize: '1.1rem' }}>Reset Password</h2>
-          <p style={{ color: '#666', textAlign: 'center', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Enter your email to receive a reset link</p>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} autoFocus />
+        {/* ── FREE TRIAL ── */}
+        {view === 'trial' && (
+          <div style={{ background: '#111', border: '2px solid #cc0000', borderRadius: '10px', padding: '26px', boxShadow: '0 0 40px rgba(204,0,0,0.15)' }}>
+            <div style={{ textAlign: 'center', marginBottom: '26px' }}>
+              <h2 style={{ color: '#cc0000', letterSpacing: '2px', textTransform: 'uppercase', margin: '0 0 6px', fontSize: '15px' }}>Free Trial Lesson</h2>
+              <p style={{ color: '#555', fontSize: '13px', margin: 0 }}>Fill in your details to claim your free lesson token</p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+              <div>
+                <label style={lbl}>First Name *</label>
+                <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} style={inp} autoFocus />
+              </div>
+              <div>
+                <label style={lbl}>Last Name</label>
+                <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} style={inp} />
+              </div>
+            </div>
+            <div style={field}>
+              <label style={lbl}>Phone Number</label>
+              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={inp} />
+            </div>
+            <div style={field}>
+              <label style={lbl}>Date of Birth</label>
+              <input type="date" value={dob} onChange={e => setDob(e.target.value)} style={{ ...inp, colorScheme: 'dark' }} />
+            </div>
+            <div style={field}>
+              <label style={lbl}>Email *</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inp} />
+            </div>
+            <div style={{ marginBottom: '26px' }}>
+              <label style={lbl}>Password *</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inp} />
+            </div>
+            <button onClick={handleTrial} disabled={loading} style={{ width: '100%', padding: '14px', background: loading ? '#333' : '#cc0000', color: loading ? '#666' : '#fff', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
+              {loading ? 'Setting up your account…' : 'Claim Free Trial'}
+            </button>
+            {message && <p style={{ marginTop: '16px', color: '#ff6666', textAlign: 'center', fontSize: '13px' }}>{message}</p>}
+            <p onClick={() => reset('home')} style={{ marginTop: '16px', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '13px' }}>← Back</p>
           </div>
-          <button onClick={handleForgotPassword} disabled={loading} style={{ width: '100%', padding: '0.85rem', background: '#cc0000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            {loading ? 'Sending...' : 'Send Reset Link'}
-          </button>
-          {message && <p style={{ marginTop: '1rem', color: message.startsWith('✅') ? '#66cc66' : '#ff6666', textAlign: 'center', fontSize: '0.9rem' }}>{message}</p>}
-          <p onClick={() => reset('signin')} style={{ marginTop: '1.5rem', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '0.9rem' }}>← Back to Sign In</p>
-        </div>
-      )}
+        )}
 
-    </main>
+        {/* ── FORGOT PASSWORD ── */}
+        {view === 'forgot' && (
+          <div style={{ background: '#111', border: '1px solid #222', borderRadius: '10px', padding: '26px' }}>
+            <h2 style={{ color: '#fff', textAlign: 'center', letterSpacing: '2px', textTransform: 'uppercase', margin: '0 0 6px', fontSize: '15px' }}>Reset Password</h2>
+            <p style={{ color: '#555', textAlign: 'center', marginBottom: '26px', fontSize: '13px' }}>Enter your email to receive a reset link</p>
+            <div style={field}>
+              <label style={lbl}>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inp} autoFocus />
+            </div>
+            <button onClick={handleForgotPassword} disabled={loading} style={{ width: '100%', padding: '13px', background: loading ? '#333' : '#cc0000', color: loading ? '#666' : '#fff', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
+              {loading ? 'Sending…' : 'Send Reset Link'}
+            </button>
+            {message && <p style={{ marginTop: '16px', color: message.startsWith('✅') ? '#66cc66' : '#ff6666', textAlign: 'center', fontSize: '13px' }}>{message}</p>}
+            <p onClick={() => reset('signin')} style={{ marginTop: '26px', textAlign: 'center', color: '#cc0000', cursor: 'pointer', fontSize: '13px' }}>← Back to Sign In</p>
+          </div>
+        )}
+
+      </div>
+    </div>
   )
 }

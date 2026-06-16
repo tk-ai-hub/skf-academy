@@ -33,8 +33,9 @@ export async function POST(request) {
   const { error: e3 } = await supabaseAdmin.from('bookings').delete().eq('student_id', studentId)
   if (e3) return Response.json({ error: 'delete bookings: ' + e3.message }, { status: 500 })
 
-  // 4. Delete push subscriptions (may not exist yet — ignore error)
+  // 4. Delete push subscriptions and poll votes (ignore errors if tables don't exist)
   await supabaseAdmin.from('push_subscriptions').delete().eq('user_id', studentId)
+  await supabaseAdmin.from('poll_votes').delete().eq('student_id', studentId)
 
   // 5. Delete user profile row
   const { error: e5 } = await supabaseAdmin.from('users').delete().eq('id', studentId)

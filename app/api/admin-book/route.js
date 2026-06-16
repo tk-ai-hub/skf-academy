@@ -62,11 +62,14 @@ export async function POST(request) {
     }
   }
 
+  // Check slot is not blocked
+  if (slot.is_blocked) return Response.json({ error: 'This slot is blocked and cannot be booked.' }, { status: 409 })
+
   // Check slot has capacity (max 2 bookings per slot)
   const { data: existing } = await supabaseAdmin
     .from('bookings')
     .select('id')
-    .eq('slot_id', slotId)
+    .eq('slot_id', slot.id)
     .in('status', ['confirmed', 'pending_token'])
   if ((existing || []).length >= 2) return Response.json({ error: 'This slot is fully booked (2/2)' }, { status: 409 })
 
@@ -118,7 +121,7 @@ export async function POST(request) {
 
   for (let i = 0; i < numWeeks; i++) {
     if (i === 0) {
-      slotsToBook.push({ sid: slotId, date: slot.slot_date })
+      slotsToBook.push({ sid: slot.id, date: slot.slot_date })
     } else {
       const baseDate = new Date(slot.slot_date + 'T12:00:00')
       baseDate.setDate(baseDate.getDate() + i * 7)
