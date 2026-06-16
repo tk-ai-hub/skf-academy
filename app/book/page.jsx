@@ -75,55 +75,31 @@ export default function Book() {
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { window.location.href = '/login'; return }
+      const uid = data.user.id
       setUser(data.user)
-      const { data: profileData } = await supabase
-        .from('users')
-        .select('first_name, last_name, phone, date_of_birth')
-        .eq('id', data.user.id)
-        .single()
-      setProfile(profileData)
-    })
-  }, [])
 
-  useEffect(() => {
-    async function loadSlots() {
-      const { data: existingBookings } = await supabase
-        .from('bookings')
-        .select('slot_id')
-        .in('status', ['confirmed', 'pending_token'])
-      const alreadyBooked = (existingBookings || []).map(b => b.slot_id)
+      const [profileRes, tokenRes, bookingRes] = await Promise.all([
+        supabase.from('users').select('first_name, last_name, phone, date_of_birth').eq('id', uid).single(),
+        supabase.from('tokens').select('amount').eq('student_id', uid),
+        supabase.from('bookings').select('slot_id').eq('student_id', uid).in('status', ['confirmed', 'pending_token']),
+      ])
+      setProfile(profileRes.data)
+      setBalance((tokenRes.data || []).reduce((sum, t) => sum + t.amount, 0))
+
+      const alreadyBooked = (bookingRes.data || []).map(b => b.slot_id)
       setBookedIds(alreadyBooked)
-      const today = new Date().toISOString().split('T')[0]
-      const ninetyDaysOut = new Date()
-      ninetyDaysOut.setDate(ninetyDaysOut.getDate() + 90)
-      const maxDate = ninetyDaysOut.toISOString().split('T')[0]
-      const { data } = await supabase
-        .from('slots')
-        .select('*')
-        .eq('is_blocked', false)
-        .gte('slot_date', today)
-        .lte('slot_date', maxDate)
-        .not('id', 'in', `(${alreadyBooked.length > 0 ? alreadyBooked.join(',') : '00000000-0000-0000-0000-000000000000'})`)
-        .order('slot_date', { ascending: true })
-        .order('start_hour', { ascending: true })
-      const filtered = (data || []).filter(s => !isGroupClass(s.slot_date, s.start_hour))
+
+      // Use server-side API to get available slots (respects capacity across all students)
+      const slotsRes = await fetch(`/api/available-slots?userId=${uid}`)
+      const slotsData = await slotsRes.json()
+
+      const filtered = (Array.isArray(slotsData) ? slotsData : []).filter(s => !isGroupClass(s.slot_date, s.start_hour))
       setSlots(filtered)
       const dates = [...new Set(filtered.map(s => s.slot_date))]
       setAvailableDates(dates)
       if (dates.length > 0) setSelectedDate(dates[0])
-    }
-    loadSlots()
+    })
   }, [])
-
-  useEffect(() => {
-    async function loadBalance() {
-      if (!user) return
-      const { data } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
-      const total = (data || []).reduce((sum, t) => sum + t.amount, 0)
-      setBalance(total)
-    }
-    loadBalance()
-  }, [user])
 
   useEffect(() => {
     if (!isRecurring || !selectedDate || !selectedSlot) {
@@ -165,8 +141,13 @@ export default function Book() {
     setIsProcessing(true)
     setMessage('')
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setMessage('Session expired. Please log in again.'); return }
+
       const { data: tokenData } = await supabase.from('tokens').select('amount').eq('student_id', user.id)
       const currentBalance = (tokenData || []).reduce((sum, t) => sum + t.amount, 0)
+
+      const studentName = profile?.first_name ? `${profile.last_name || ''} ${profile.first_name}`.trim() : user.email
 
       if (isRecurring) {
         const occurrences = getWeeklyOccurrences(selectedSlot.slot_date, recurringWeeks)
@@ -179,33 +160,47 @@ export default function Book() {
           setMessage(`You only have ${currentBalance} token(s) but need ${availableSlots.length}.`)
           return
         }
-        const studentName = profile?.first_name ? `${profile.last_name || ''} ${profile.first_name}`.trim() : user.email
-        const newBookedIds = []
         const groupId = selectedSlot.id + '-' + Date.now()
-        for (const s of availableSlots) {
-          const { data: newBooking, error } = await supabase
-            .from('bookings')
-            .insert({ tenant_id: s.tenant_id, student_id: user.id, slot_id: s.id, status: 'confirmed', is_recurring: true, recurring_group_id: groupId })
-            .select().single()
-          if (!error && newBooking) {
-            await supabase.from('tokens').insert({ tenant_id: s.tenant_id, student_id: user.id, amount: -1, reason: 'recurring lesson booked', booking_id: newBooking.id })
-            newBookedIds.push(s.id)
-            await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'booking', studentEmail: user.email, studentName, phone: profile?.phone || '', date: s.slot_date, time: formatHour(s.start_hour), hour: s.start_hour, isRecurring: true, totalOccurrences: availableSlots.length }) })
-          }
+        const res = await fetch('/api/book-slot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+          body: JSON.stringify({ slotIds: availableSlots.map(s => s.id), tenantId: selectedSlot.tenant_id, isRecurring: true, recurringGroupId: groupId }),
+        })
+        const results = await res.json()
+        const booked = results.filter(r => r.booking)
+        const failed = results.filter(r => r.error === 'slot_full')
+        const newBookedIds = booked.map(r => r.slotId)
+        for (const r of booked) {
+          const s = availableSlots.find(sl => sl.id === r.slotId)
+          if (s) await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'booking', studentEmail: user.email, studentName, phone: profile?.phone || '', date: s.slot_date, time: formatHour(s.start_hour), hour: s.start_hour, isRecurring: true, totalOccurrences: booked.length }) })
         }
         setBalance(currentBalance - newBookedIds.length)
         setBookedIds(prev => [...prev, ...newBookedIds])
+        setSlots(prev => prev.filter(s => !failed.some(f => f.slotId === s.id)))
         setSelectedSlot(null)
-        setMessage(`✅ Booked ${newBookedIds.length} recurring lesson${newBookedIds.length > 1 ? 's' : ''} every week at ${formatHour(selectedSlot.start_hour)}!`)
+        if (newBookedIds.length === 0) {
+          setMessage('⚠️ All selected slots were already taken. Please choose another time.')
+        } else if (failed.length > 0) {
+          setMessage(`✅ Booked ${newBookedIds.length} lesson${newBookedIds.length > 1 ? 's' : ''}. ${failed.length} slot${failed.length > 1 ? 's were' : ' was'} already taken.`)
+        } else {
+          setMessage(`✅ Booked ${newBookedIds.length} recurring lesson${newBookedIds.length > 1 ? 's' : ''} every week at ${formatHour(selectedSlot.start_hour)}!`)
+        }
       } else {
         if (currentBalance <= 0) { setMessage('You have no tokens left. Please contact your instructor to add more.'); return }
-        const { data: newBooking, error } = await supabase
-          .from('bookings')
-          .insert({ tenant_id: selectedSlot.tenant_id, student_id: user.id, slot_id: selectedSlot.id, status: 'confirmed' })
-          .select().single()
-        if (error) { setMessage('Could not book this slot. ' + error.message); return }
-        await supabase.from('tokens').insert({ tenant_id: selectedSlot.tenant_id, student_id: user.id, amount: -1, reason: 'lesson booked', booking_id: newBooking.id })
-        const studentName = profile?.first_name ? `${profile.last_name || ''} ${profile.first_name}`.trim() : user.email
+        const res = await fetch('/api/book-slot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+          body: JSON.stringify({ slotIds: [selectedSlot.id], tenantId: selectedSlot.tenant_id }),
+        })
+        const results = await res.json()
+        const result = results[0]
+        if (result?.error === 'slot_full') {
+          setMessage('⚠️ This slot was just taken by someone else. Please choose another time.')
+          setSlots(prev => prev.filter(s => s.id !== selectedSlot.id))
+          setSelectedSlot(null)
+          return
+        }
+        if (result?.error) { setMessage('Could not book this slot. Please try again.'); return }
         await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'booking', studentEmail: user.email, studentName, phone: profile?.phone || '', date: selectedSlot.slot_date, time: formatHour(selectedSlot.start_hour), hour: selectedSlot.start_hour }) })
         setBalance(currentBalance - 1)
         setBookedIds(prev => [...prev, selectedSlot.id])
@@ -228,12 +223,38 @@ export default function Book() {
       </div>
 
       <div style={{ marginBottom: '1.5rem' }}>
-        <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Select a Date</label>
-        <select value={selectedDate} onChange={e => { setSelectedDate(e.target.value); setSelectedSlot(null) }} style={{ width: '100%', padding: '0.75rem', background: '#2a2a2a', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '1rem' }}>
-          {availableDates.map(d => (
-            <option key={d} value={d}>{formatDate(d)}{isBirthday(d, profile?.date_of_birth) ? ' 🎂' : ''}</option>
-          ))}
-        </select>
+        <label style={{ display: 'block', color: '#999', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Select a Date</label>
+        <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem', WebkitOverflowScrolling: 'touch' }}>
+          {availableDates.map(d => {
+            const isSelected = selectedDate === d
+            const bday = isBirthday(d, profile?.date_of_birth)
+            const dateObj = new Date(d + 'T00:00:00')
+            const weekday = dateObj.toLocaleDateString('en-CA', { weekday: 'short' })
+            const monthDay = dateObj.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })
+            return (
+              <button
+                key={d}
+                onClick={() => { setSelectedDate(d); setSelectedSlot(null) }}
+                style={{
+                  flexShrink: 0,
+                  padding: '0.6rem 1rem',
+                  background: isSelected ? '#cc0000' : '#2a2a2a',
+                  color: '#fff',
+                  border: isSelected ? '1px solid #ff3333' : '1px solid #444',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  minWidth: '72px',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <div style={{ fontSize: '0.7rem', color: isSelected ? '#ffaaaa' : '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{weekday}</div>
+                <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '2px' }}>{monthDay}</div>
+                {bday && <div style={{ fontSize: '0.65rem', marginTop: '2px' }}>🎂</div>}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {birthdayToday && (
